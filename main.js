@@ -10,6 +10,7 @@ let posRT_A, posRT_B;
 let velRT_A, velRT_B;
 let particles, renderMaterial, simMaterial;
 
+const clock = new THREE.Clock();
 
 initThree();
 initGPGPU();
@@ -318,7 +319,6 @@ function updateHandControls() {
 // =====================================================
 // 動畫
 // =====================================================
-const clock = new THREE.Clock();
 
 function simulate(dt) {
   simMaterial.uniforms.u_dt.value = dt;
