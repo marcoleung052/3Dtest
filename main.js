@@ -12,6 +12,7 @@ let particles, renderMaterial, simMaterial;
 
 const clock = new THREE.Clock();
 
+// 啟動流程
 initThree();
 initGPGPU();
 initParticles();
@@ -23,17 +24,22 @@ animate();
 // =====================================================
 function initThree() {
   scene = new THREE.Scene();
-  camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.1, 1000);
+  camera = new THREE.PerspectiveCamera(
+    60,
+    window.innerWidth / window.innerHeight,
+    0.1,
+    1000
+  );
   camera.position.set(0, 0, 5);
 
   renderer = new THREE.WebGLRenderer({ antialias: true });
-  renderer.setSize(innerWidth, innerHeight);
+  renderer.setSize(window.innerWidth, window.innerHeight);
   document.body.appendChild(renderer.domElement);
 
   window.addEventListener("resize", () => {
-    camera.aspect = innerWidth / innerHeight;
+    camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
-    renderer.setSize(innerWidth, innerHeight);
+    renderer.setSize(window.innerWidth, window.innerHeight);
   });
 }
 
@@ -48,11 +54,13 @@ function createRT() {
     magFilter: THREE.NearestFilter,
     wrapS: THREE.ClampToEdgeWrapping,
     wrapT: THREE.ClampToEdgeWrapping,
+    depthBuffer: false,
+    stencilBuffer: false,
   });
 }
 
 // =====================================================
-// 初始化 GPGPU
+// 初始化 GPGPU（模擬用貼圖）
 // =====================================================
 function initGPGPU() {
   posRT_A = createRT();
@@ -69,22 +77,36 @@ function initGPGPU() {
     initPos[i4 + 2] = (Math.random() - 0.5) * 2;
     initPos[i4 + 3] = 1.0;
   }
-  const texPos = new THREE.DataTexture(initPos, SIZE, SIZE, THREE.RGBAFormat, THREE.FloatType);
+  const texPos = new THREE.DataTexture(
+    initPos,
+    SIZE,
+    SIZE,
+    THREE.RGBAFormat,
+    THREE.FloatType
+  );
   texPos.needsUpdate = true;
 
   renderer.setRenderTarget(posRT_A);
+  renderer.clear();
   renderer.copyTextureToTexture(new THREE.Vector2(0, 0), texPos, posRT_A.texture);
 
-  // 初始化速度貼圖
+  // 初始化速度貼圖（全部 0）
   const initVel = new Float32Array(NUM * 4);
-  const texVel = new THREE.DataTexture(initVel, SIZE, SIZE, THREE.RGBAFormat, THREE.FloatType);
+  const texVel = new THREE.DataTexture(
+    initVel,
+    SIZE,
+    SIZE,
+    THREE.RGBAFormat,
+    THREE.FloatType
+  );
   texVel.needsUpdate = true;
 
   renderer.setRenderTarget(velRT_A);
+  renderer.clear();
   renderer.copyTextureToTexture(new THREE.Vector2(0, 0), texVel, velRT_A.texture);
   renderer.setRenderTarget(null);
 
-  // 模擬場景
+  // 模擬場景（全螢幕平面）
   simScene = new THREE.Scene();
   simCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
 
@@ -122,36 +144,39 @@ function initGPGPU() {
       vec3 shapeSphere(vec2 uv) {
         float x = uv.x * 2.0 - 1.0;
         float y = uv.y * 2.0 - 1.0;
-        float z = sqrt(max(0.0, 1.0 - x*x - y*y));
+        float r2 = x*x + y*y;
+        float z = r2 > 1.0 ? 0.0 : sqrt(max(0.0, 1.0 - r2));
         return vec3(x, y, z);
       }
 
       vec3 shapeHeart(vec2 uv) {
-        float t = uv.x * 6.283;
+        float t = uv.x * 6.2831853;
         float r = 0.3;
         float x = r * 16.0 * pow(sin(t), 3.0);
-        float y = r * (13.0*cos(t) - 5.0*cos(2.0*t) - 2.0*cos(3.0*t) - cos(4.0*t));
+        float y = r * (13.0*cos(t) - 5.0*cos(2.0*t)
+                    - 2.0*cos(3.0*t) - cos(4.0*t));
         return vec3(x*0.05, y*0.05, 0.0);
       }
 
       vec3 shapeFlower(vec2 uv) {
-        float t = uv.x * 6.283;
+        float t = uv.x * 6.2831853;
         float r = 0.8 + 0.2 * sin(5.0 * t);
-        return vec3(r*cos(t), r*sin(t), 0.0);
+        return vec3(r * cos(t), r * sin(t), 0.0);
       }
 
       vec3 shapeStar(vec2 uv) {
-        float t = uv.x * 6.283;
-        float r = (mod(floor(uv.y * 10.0), 2.0) == 0.0) ? 1.0 : 0.4;
-        return vec3(r*cos(t), r*sin(t), 0.0);
+        float t = uv.x * 6.2831853;
+        float band = floor(uv.y * 10.0);
+        float r = mod(band, 2.0) == 0.0 ? 1.0 : 0.4;
+        return vec3(r * cos(t), r * sin(t), 0.0);
       }
 
       vec3 shapeSaturn(vec2 uv) {
-        float t = uv.x * 6.283;
+        float t = uv.x * 6.2831853;
         if (uv.y < 0.7) {
-          return vec3(0.6*cos(t), 0.6*sin(t), 0.0);
+          return vec3(0.6 * cos(t), 0.6 * sin(t), 0.0);
         } else {
-          return vec3(1.2*cos(t), 0.0, 1.2*sin(t));
+          return vec3(1.2 * cos(t), 0.0, 1.2 * sin(t));
         }
       }
 
@@ -181,13 +206,13 @@ function initGPGPU() {
     `,
   });
 
-  simScene.add(new THREE.Mesh(simPlane, simMaterial));
+  const simMesh = new THREE.Mesh(simPlane, simMaterial);
+  simScene.add(simMesh);
 }
 
 // =====================================================
 // 粒子渲染
 // =====================================================
-
 function initParticles() {
   const geo = new THREE.BufferGeometry();
   const uv = new Float32Array(NUM * 2);
@@ -216,15 +241,14 @@ function initParticles() {
       uniform sampler2D u_posTex;
       uniform float u_time;
       varying vec3 vColor;
-    
+
       void main() {
-        // 直接使用 attribute uv
         vec2 coord = uv;
         vec3 pos = texture2D(u_posTex, coord).xyz;
-    
+
         float h = fract(coord.x + u_time * 0.1);
         vColor = vec3(h, 1.0 - h, 0.8);
-    
+
         vec4 mv = modelViewMatrix * vec4(pos, 1.0);
         gl_PointSize = 2.0 * (300.0 / -mv.z);
         gl_Position = projectionMatrix * mv;
@@ -261,9 +285,14 @@ let latestHand = null;
 function initHandTracking() {
   const video = document.getElementById("video");
 
-  navigator.mediaDevices.getUserMedia({ video: true }).then((stream) => {
-    video.srcObject = stream;
-  });
+  navigator.mediaDevices
+    .getUserMedia({ video: true })
+    .then((stream) => {
+      video.srcObject = stream;
+    })
+    .catch((err) => {
+      console.warn("Camera permission denied or not available:", err);
+    });
 
   const hands = new Hands({
     locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`,
@@ -277,11 +306,15 @@ function initHandTracking() {
   });
 
   hands.onResults((res) => {
-    latestHand = res.multiHandLandmarks?.[0] || null;
+    latestHand = res.multiHandLandmarks && res.multiHandLandmarks.length > 0
+      ? res.multiHandLandmarks[0]
+      : null;
   });
 
   const cam = new Camera(video, {
-    onFrame: async () => hands.send({ image: video }),
+    onFrame: async () => {
+      await hands.send({ image: video });
+    },
     width: 640,
     height: 480,
   });
@@ -296,19 +329,19 @@ function updateHandControls() {
   const thumb = latestHand[4];
   const pinky = latestHand[17];
 
-  // spread
+  // spread：手掌寬度
   const palm = Math.hypot(
     latestHand[1].x - latestHand[17].x,
     latestHand[1].y - latestHand[17].y
   );
   controls.spread = THREE.MathUtils.clamp(palm * 5, 0.3, 3.0);
 
-  // color
+  // colorMode：拇指 + 食指距離
   const pinch = Math.hypot(index.x - thumb.x, index.y - thumb.y);
   controls.colorMode = pinch < 0.05 ? 0 : pinch < 0.1 ? 1 : 2;
 
-  // shape
-  const cx = (wrist.x + index.x + pinky.x) / 3;
+  // shape：手掌水平位置
+  const cx = (wrist.x + index.x + pinky.x) / 3.0;
   if (cx < 0.2) controls.shape = 0;      // 球
   else if (cx < 0.4) controls.shape = 1; // 心
   else if (cx < 0.6) controls.shape = 2; // 花
@@ -319,7 +352,6 @@ function updateHandControls() {
 // =====================================================
 // 動畫
 // =====================================================
-
 function simulate(dt) {
   simMaterial.uniforms.u_dt.value = dt;
   simMaterial.uniforms.u_time.value += dt;
@@ -333,6 +365,7 @@ function simulate(dt) {
   renderer.render(simScene, simCamera);
   renderer.setRenderTarget(null);
 
+  // swap position RT
   let tmp = posRT_A;
   posRT_A = posRT_B;
   posRT_B = tmp;
