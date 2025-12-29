@@ -86,21 +86,14 @@
     <div class="shape-icon" data-id="5">🖼️</div>
   </div>
 
-  <div class="shape-icon-label">用食指滑動切換圖案 · 捏合改變顏色 · 張開改變散佈</div>
+  <div class="shape-icon-label">
+    用食指滑動切換圖案 · 捏合改變顏色 · 張開改變散佈
+  </div>
 
-  <!-- 你的圖片 -->
-  <img id="shapeImage" src="xxxx.png" style="display:none;">
+  <!-- 放在 GitHub 上、與此檔同資料夾的圖片，例如 google-translate.png -->
+  <img id="shapeImage" src="google-translate.png" style="display:none;">
 
 <script>
-
-const img = document.getElementById("shapeImage");
-img.onerror = () => {
-  console.error("圖片載入失敗：請確認檔名與路徑");
-};
-img.onload = () => {
-  console.log("圖片載入成功");
-};
-
 /* ============================================================
    Three.js 基本場景
 ============================================================ */
@@ -162,11 +155,11 @@ const targetPositions = new Float32Array(count * 3);
 
 for (let i = 0; i < count; i++) {
   const i3 = i * 3;
-  positions[i3] = (Math.random() - 0.5) * 4;
+  positions[i3]   = (Math.random() - 0.5) * 4;
   positions[i3+1] = (Math.random() - 0.5) * 4;
   positions[i3+2] = (Math.random() - 0.5) * 4;
 
-  colors[i3] = Math.random();
+  colors[i3]   = Math.random();
   colors[i3+1] = Math.random();
   colors[i3+2] = Math.random();
 }
@@ -186,9 +179,9 @@ const particles = new THREE.Points(geometry, material);
 scene.add(particles);
 
 /* ============================================================
-   圖片轉粒子形狀
+   圖片轉粒子形狀（位置 + 顏色）
 ============================================================ */
-let imageShapePoints = null;
+let imageShapePoints = null; // [{pos: Vector3, color:{r,g,b}}, ...]
 
 function shapeFromImage(img, count, callback) {
   const canvas = document.createElement("canvas");
@@ -205,12 +198,19 @@ function shapeFromImage(img, count, callback) {
   for (let y = 0; y < canvas.height; y += 3) {
     for (let x = 0; x < canvas.width; x += 3) {
       const i = (y * canvas.width + x) * 4;
-      const alpha = data[i + 3];
+      const r = data[i] / 255;
+      const g = data[i + 1] / 255;
+      const b = data[i + 2] / 255;
+      const a = data[i + 3];
 
-      if (alpha > 128) {
+      if (a > 128) {
         const nx = (x / canvas.width) * 2 - 1;
         const ny = -(y / canvas.height) * 2 + 1;
-        points.push(new THREE.Vector3(nx, ny, 0));
+
+        points.push({
+          pos: new THREE.Vector3(nx, ny, 0),
+          color: { r, g, b }
+        });
       }
     }
   }
@@ -218,14 +218,18 @@ function shapeFromImage(img, count, callback) {
   const result = [];
   for (let i = 0; i < count; i++) {
     const p = points[Math.floor(Math.random() * points.length)];
-    result.push(p.clone());
+    result.push({
+      pos: p.pos.clone(),
+      color: { r: p.color.r, g: p.color.g, b: p.color.b }
+    });
   }
 
   callback(result);
 }
 
-document.getElementById("shapeImage").onload = () => {
-  shapeFromImage(document.getElementById("shapeImage"), count, (pts) => {
+const img = document.getElementById("shapeImage");
+img.onload = () => {
+  shapeFromImage(img, count, (pts) => {
     imageShapePoints = pts;
   });
 };
@@ -302,12 +306,16 @@ function updateShapeTargets(type) {
       case 3: p = shapeSaturn(i, count); break;
       case 4: p = shapeFireworks(i, count); break;
       case 5:
-        p = imageShapePoints ? imageShapePoints[i] : new THREE.Vector3(0,0,0);
+        if (imageShapePoints) {
+          p = imageShapePoints[i].pos;
+        } else {
+          p = new THREE.Vector3(0, 0, 0);
+        }
         break;
     }
 
     const i3 = i * 3;
-    targetPositions[i3] = p.x;
+    targetPositions[i3]   = p.x;
     targetPositions[i3+1] = p.y;
     targetPositions[i3+2] = p.z;
   }
@@ -323,7 +331,7 @@ function updateShapeUI(activeId) {
 }
 
 /* ============================================================
-   手指滑動偵測（最穩定版本）
+   手指滑動偵測（穩定版：不連跳、不回彈）
 ============================================================ */
 let lastFingerX = null;
 let swipeLocked = false;
@@ -338,7 +346,7 @@ function detectFingerSwipe(x) {
   const dx = x - lastFingerX;
   lastFingerX = x;
 
-  // 手指停止 → 解鎖
+  // 手指接近停止 → 累積中立幀數，足夠後解鎖
   if (Math.abs(dx) < 0.01) {
     neutralFrames++;
     if (neutralFrames > 5) {
@@ -352,7 +360,7 @@ function detectFingerSwipe(x) {
 
   if (swipeLocked) return;
 
-  // 手指往右滑
+  // 手指往右滑（鏡像後 x 增加）
   if (dx > 0.05) {
     controls.shapeType = (controls.shapeType + 1) % 6;
     swipeLocked = true;
@@ -368,7 +376,7 @@ function detectFingerSwipe(x) {
 }
 
 /* ============================================================
-   手勢控制整合
+   手勢控制整合（只用食指）
 ============================================================ */
 const controls = {
   spread: 1.0,
@@ -383,10 +391,11 @@ function updateControlsFromHand(landmarks) {
   const finger = landmarks[8];
   const x = 1 - finger.x; // 鏡像後的 X
 
-  // 滑動感
+  // 滑動感：手指左右位置 → 粒子旋轉偏移
   const centeredX = (x - 0.5) * 2;
   controls.handX += (centeredX - controls.handX) * 0.25;
 
+  // 切換圖案
   detectFingerSwipe(x);
 
   // 捏合控制顏色
@@ -474,26 +483,36 @@ function animate() {
   for (let i = 0; i < count; i++) {
     const i3 = i * 3;
 
-    const tx = targetPositions[i3] * controls.spread;
+    const tx = targetPositions[i3]   * controls.spread;
     const ty = targetPositions[i3+1] * controls.spread;
     const tz = targetPositions[i3+2] * controls.spread;
 
-    pos[i3] += (tx - pos[i3]) * 0.1;
+    pos[i3]   += (tx - pos[i3])   * 0.1;
     pos[i3+1] += (ty - pos[i3+1]) * 0.1;
     pos[i3+2] += (tz - pos[i3+2]) * 0.1;
 
     let r, g, b;
-    if (controls.colorMode === 0) {
-      r = 0.2; g = 0.7; b = 1.0;
-    } else if (controls.colorMode === 1) {
-      r = 1.0; g = 0.6; b = 0.2;
+
+    // 圖片模式：使用圖片像素顏色
+    if (controls.shapeType === 5 && imageShapePoints) {
+      const cImg = imageShapePoints[i].color;
+      r = cImg.r;
+      g = cImg.g;
+      b = cImg.b;
     } else {
-      const h = (i / count + clock.elapsedTime * 0.1) % 1;
-      const c = new THREE.Color().setHSL(h, 0.7, 0.5);
-      r = c.r; g = c.g; b = c.b;
+      // 其它模式：仍然保留三種顏色模式
+      if (controls.colorMode === 0) {
+        r = 0.2; g = 0.7; b = 1.0;
+      } else if (controls.colorMode === 1) {
+        r = 1.0; g = 0.6; b = 0.2;
+      } else {
+        const h = (i / count + clock.elapsedTime * 0.1) % 1;
+        const c = new THREE.Color().setHSL(h, 0.7, 0.5);
+        r = c.r; g = c.g; b = c.b;
+      }
     }
 
-    col[i3] += (r - col[i3]) * 0.2;
+    col[i3]   += (r - col[i3])   * 0.2;
     col[i3+1] += (g - col[i3+1]) * 0.2;
     col[i3+2] += (b - col[i3+2]) * 0.2;
   }
