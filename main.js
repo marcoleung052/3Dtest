@@ -8,6 +8,8 @@ let renderer, scene, camera;
 let simScene, simCamera;
 let posRT_A, posRT_B;
 let velRT_A, velRT_B;
+let particles, renderMaterial;
+
 
 initThree();
 initGPGPU();
@@ -184,7 +186,6 @@ function initGPGPU() {
 // =====================================================
 // 粒子渲染
 // =====================================================
-let particles, renderMaterial;
 
 function initParticles() {
   const geo = new THREE.BufferGeometry();
