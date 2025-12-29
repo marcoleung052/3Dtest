@@ -2,7 +2,7 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8" />
-  <title>Hand Finger Swipe Particles</title>
+  <title>Finger Swipe Particle Shapes</title>
 
   <style>
     body { margin: 0; overflow: hidden; background: #000; }
@@ -12,8 +12,8 @@
       position: fixed;
       top: 0;
       left: 0;
-      width: 320px;
-      height: 240px;
+      width: 640px;
+      height: 480px;
       z-index: 10;
       pointer-events: none;
     }
@@ -76,15 +76,20 @@
   <video id="video" autoplay playsinline></video>
   <canvas id="overlay"></canvas>
 
+  <!-- UI -->
   <div id="shape-ui">
     <div class="shape-icon" data-id="0">⚪</div>
     <div class="shape-icon" data-id="1">❤️</div>
     <div class="shape-icon" data-id="2">🌸</div>
     <div class="shape-icon" data-id="3">🪐</div>
     <div class="shape-icon" data-id="4">🎆</div>
+    <div class="shape-icon" data-id="5">🖼️</div>
   </div>
 
-  <div class="shape-icon-label">用「食指滑動」切換圖案 · 捏合改變顏色 · 張開改變散佈</div>
+  <div class="shape-icon-label">用食指滑動切換圖案 · 捏合改變顏色 · 張開改變散佈</div>
+
+  <!-- 你的圖片 -->
+  <img id="shapeImage" src="xxxx.png" style="display:none;">
 
 <script>
 /* ============================================================
@@ -172,6 +177,51 @@ const particles = new THREE.Points(geometry, material);
 scene.add(particles);
 
 /* ============================================================
+   圖片轉粒子形狀
+============================================================ */
+let imageShapePoints = null;
+
+function shapeFromImage(img, count, callback) {
+  const canvas = document.createElement("canvas");
+  const ctx = canvas.getContext("2d");
+
+  canvas.width = 200;
+  canvas.height = 200;
+
+  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+  const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+  const points = [];
+
+  for (let y = 0; y < canvas.height; y += 3) {
+    for (let x = 0; x < canvas.width; x += 3) {
+      const i = (y * canvas.width + x) * 4;
+      const alpha = data[i + 3];
+
+      if (alpha > 128) {
+        const nx = (x / canvas.width) * 2 - 1;
+        const ny = -(y / canvas.height) * 2 + 1;
+        points.push(new THREE.Vector3(nx, ny, 0));
+      }
+    }
+  }
+
+  const result = [];
+  for (let i = 0; i < count; i++) {
+    const p = points[Math.floor(Math.random() * points.length)];
+    result.push(p.clone());
+  }
+
+  callback(result);
+}
+
+document.getElementById("shapeImage").onload = () => {
+  shapeFromImage(document.getElementById("shapeImage"), count, (pts) => {
+    imageShapePoints = pts;
+  });
+};
+
+/* ============================================================
    粒子形狀模板
 ============================================================ */
 function shapeSphere(i, count) {
@@ -235,13 +285,18 @@ function shapeFireworks(i, count) {
 function updateShapeTargets(type) {
   for (let i = 0; i < count; i++) {
     let p;
+
     switch (type) {
       case 0: p = shapeSphere(i, count); break;
       case 1: p = shapeHeart(i, count); break;
       case 2: p = shapeFlower(i, count); break;
       case 3: p = shapeSaturn(i, count); break;
       case 4: p = shapeFireworks(i, count); break;
+      case 5:
+        p = imageShapePoints ? imageShapePoints[i] : new THREE.Vector3(0,0,0);
+        break;
     }
+
     const i3 = i * 3;
     targetPositions[i3] = p.x;
     targetPositions[i3+1] = p.y;
@@ -259,18 +314,11 @@ function updateShapeUI(activeId) {
 }
 
 /* ============================================================
-   手勢控制（只用食指滑動）
+   手指滑動偵測（最穩定版本）
 ============================================================ */
-const controls = {
-  spread: 1.0,
-  colorMode: 0,
-  shapeType: 0,
-  handX: 0,
-};
-
 let lastFingerX = null;
-let swipeLock = false;
-let swipeTimer = 0;
+let swipeLocked = false;
+let neutralFrames = 0;
 
 function detectFingerSwipe(x) {
   if (lastFingerX === null) {
@@ -281,37 +329,44 @@ function detectFingerSwipe(x) {
   const dx = x - lastFingerX;
   lastFingerX = x;
 
-  // ===== 中立區判定（手指停止） =====
+  // 手指停止 → 解鎖
   if (Math.abs(dx) < 0.01) {
     neutralFrames++;
     if (neutralFrames > 5) {
-      swipeLocked = false;   // 完全停止後才解鎖
+      swipeLocked = false;
       neutralFrames = 0;
     }
     return;
   }
 
-  // 手指還在動 → 重置中立計數
   neutralFrames = 0;
 
-  // 如果已經觸發過一次 → 不再觸發
   if (swipeLocked) return;
 
-  // ===== 手指往右滑（鏡像後 x 增加） =====
+  // 手指往右滑
   if (dx > 0.05) {
-    controls.shapeType = (controls.shapeType + 1) % 5;
+    controls.shapeType = (controls.shapeType + 1) % 6;
     swipeLocked = true;
     return;
   }
 
-  // ===== 手指往左滑 =====
+  // 手指往左滑
   if (dx < -0.05) {
-    controls.shapeType = (controls.shapeType - 1 + 5) % 5;
+    controls.shapeType = (controls.shapeType - 1 + 6) % 6;
     swipeLocked = true;
     return;
   }
 }
 
+/* ============================================================
+   手勢控制整合
+============================================================ */
+const controls = {
+  spread: 1.0,
+  colorMode: 0,
+  shapeType: 0,
+  handX: 0,
+};
 
 function updateControlsFromHand(landmarks) {
   if (!landmarks) return;
@@ -319,11 +374,10 @@ function updateControlsFromHand(landmarks) {
   const finger = landmarks[8];
   const x = 1 - finger.x; // 鏡像後的 X
 
-  // 即時滑動感
+  // 滑動感
   const centeredX = (x - 0.5) * 2;
   controls.handX += (centeredX - controls.handX) * 0.25;
 
-  // 滑動切換圖案
   detectFingerSwipe(x);
 
   // 捏合控制顏色
