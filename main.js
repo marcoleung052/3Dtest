@@ -1,7 +1,7 @@
 // =====================================================
 // 基本設定
 // =====================================================
-const SIZE = 256;                 // 256×256 = 65536 粒子
+const SIZE = 256;
 const NUM = SIZE * SIZE;
 
 let renderer, scene, camera;
@@ -9,6 +9,8 @@ let simScene, simCamera;
 let posRT_A, posRT_B;
 let velRT_A, velRT_B;
 let particles, renderMaterial, simMaterial;
+
+let latestHand = null;   // ← 必須放在這裡（全域變數）
 
 const clock = new THREE.Clock();
 
@@ -279,8 +281,6 @@ const controls = {
   shape: 0,
   colorMode: 0,
 };
-
-let latestHand = null;
 
 function initHandTracking() {
   const video = document.getElementById("video");
