@@ -2,7 +2,8 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8" />
-  <title>Hand-Controlled 3D Particles</title>
+  <title>Hand Finger Swipe Particles</title>
+
   <style>
     body { margin: 0; overflow: hidden; background: #000; }
     video { display: none; }
@@ -70,6 +71,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
 </head>
+
 <body>
   <video id="video" autoplay playsinline></video>
   <canvas id="overlay"></canvas>
@@ -81,385 +83,364 @@
     <div class="shape-icon" data-id="3">🪐</div>
     <div class="shape-icon" data-id="4">🎆</div>
   </div>
-  <div class="shape-icon-label">左右滑動切換圖案 · 捏合改變顏色 · 張開改變散佈</div>
 
-  <script>
-    // =========================
-    //  Three.js 基本場景
-    // =========================
-    const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(
-      60,
-      window.innerWidth / window.innerHeight,
-      0.1,
-      1000
-    );
-    camera.position.set(0, 0, 5);
+  <div class="shape-icon-label">用「食指滑動」切換圖案 · 捏合改變顏色 · 張開改變散佈</div>
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    document.body.appendChild(renderer.domElement);
+<script>
+/* ============================================================
+   Three.js 基本場景
+============================================================ */
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(
+  60, window.innerWidth / window.innerHeight, 0.1, 1000
+);
+camera.position.set(0, 0, 5);
 
-    window.addEventListener("resize", () => {
-      camera.aspect = window.innerWidth / window.innerHeight;
-      camera.updateProjectionMatrix();
-      renderer.setSize(window.innerWidth, window.innerHeight);
-    });
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+document.body.appendChild(renderer.domElement);
 
-    // =========================
-    //  Overlay Canvas（鏡頭 + 點）
-    // =========================
-    const overlay = document.getElementById("overlay");
-    const ctx = overlay.getContext("2d");
-    overlay.width = 640;
-    overlay.height = 480;
+window.addEventListener("resize", () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
 
-    const video = document.getElementById("video");
+/* ============================================================
+   Overlay Canvas（鏡頭 + 手指點）
+============================================================ */
+const overlay = document.getElementById("overlay");
+const ctx = overlay.getContext("2d");
+overlay.width = 640;
+overlay.height = 480;
 
-    function drawHandOverlay(landmarks) {
-      ctx.clearRect(0, 0, overlay.width, overlay.height);
+const video = document.getElementById("video");
 
-      // 鏡像鏡頭（自拍感覺）
-      ctx.save();
-      ctx.scale(-1, 1);
-      ctx.drawImage(video, -overlay.width, 0, overlay.width, overlay.height);
-      ctx.restore();
+function drawHandOverlay(landmarks) {
+  ctx.clearRect(0, 0, overlay.width, overlay.height);
 
-      if (!landmarks) return;
+  // 鏡像鏡頭
+  ctx.save();
+  ctx.scale(-1, 1);
+  ctx.drawImage(video, -overlay.width, 0, overlay.width, overlay.height);
+  ctx.restore();
 
-      ctx.fillStyle = "rgba(0,255,0,0.9)";
-      for (let i = 0; i < landmarks.length; i++) {
-        // MediaPipe x 是 0~1（左→右），但畫面已鏡像，所以要 1 - x
-        const x = (1 - landmarks[i].x) * overlay.width;
-        const y = landmarks[i].y * overlay.height;
-        ctx.beginPath();
-        ctx.arc(x, y, 5, 0, Math.PI * 2);
-        ctx.fill();
-      }
+  if (!landmarks) return;
+
+  ctx.fillStyle = "rgba(0,255,0,0.9)";
+  const finger = landmarks[8];
+
+  const x = (1 - finger.x) * overlay.width;
+  const y = finger.y * overlay.height;
+
+  ctx.beginPath();
+  ctx.arc(x, y, 8, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+/* ============================================================
+   粒子初始化
+============================================================ */
+const count = 5000;
+const positions = new Float32Array(count * 3);
+const colors = new Float32Array(count * 3);
+const targetPositions = new Float32Array(count * 3);
+
+for (let i = 0; i < count; i++) {
+  const i3 = i * 3;
+  positions[i3] = (Math.random() - 0.5) * 4;
+  positions[i3+1] = (Math.random() - 0.5) * 4;
+  positions[i3+2] = (Math.random() - 0.5) * 4;
+
+  colors[i3] = Math.random();
+  colors[i3+1] = Math.random();
+  colors[i3+2] = Math.random();
+}
+
+const geometry = new THREE.BufferGeometry();
+geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+
+const material = new THREE.PointsMaterial({
+  size: 0.05,
+  vertexColors: true,
+  transparent: true,
+  depthWrite: false,
+});
+
+const particles = new THREE.Points(geometry, material);
+scene.add(particles);
+
+/* ============================================================
+   粒子形狀模板
+============================================================ */
+function shapeSphere(i, count) {
+  const u = i / count;
+  const theta = Math.acos(2 * u - 1);
+  const phi = Math.random() * Math.PI * 2;
+  const r = 1.0;
+  return new THREE.Vector3(
+    r * Math.sin(theta) * Math.cos(phi),
+    r * Math.cos(theta),
+    r * Math.sin(theta) * Math.sin(phi)
+  );
+}
+
+function shapeHeart(i, count) {
+  const t = (i / count) * Math.PI * 2;
+  const r = 0.5;
+  const x = r * 16 * Math.pow(Math.sin(t), 3);
+  const y =
+    r * (13 * Math.cos(t) -
+    5 * Math.cos(2 * t) -
+    2 * Math.cos(3 * t) -
+    Math.cos(4 * t));
+  const z = (Math.random() - 0.5) * 0.2;
+  return new THREE.Vector3(x * 0.05, y * 0.05, z);
+}
+
+function shapeFlower(i, count) {
+  const petals = 5;
+  const t = (i / count) * Math.PI * 2;
+  const r = 0.8 + 0.2 * Math.sin(petals * t);
+  return new THREE.Vector3(
+    r * Math.cos(t),
+    r * Math.sin(t),
+    (Math.random() - 0.5) * 0.3
+  );
+}
+
+function shapeSaturn(i, count) {
+  if (i < count * 0.7) return shapeSphere(i, count * 0.7);
+  const t = Math.random() * Math.PI * 2;
+  return new THREE.Vector3(
+    1.5 * Math.cos(t),
+    (Math.random() - 0.5) * 0.1,
+    1.5 * Math.sin(t)
+  );
+}
+
+function shapeFireworks(i, count) {
+  const t = Math.random() * Math.PI * 2;
+  const u = Math.random() * 2 - 1;
+  const theta = Math.acos(u);
+  const r = 0.2 + Math.random() * 2.0;
+  return new THREE.Vector3(
+    r * Math.sin(theta) * Math.cos(t),
+    r * Math.cos(theta),
+    r * Math.sin(theta) * Math.sin(t)
+  );
+}
+
+function updateShapeTargets(type) {
+  for (let i = 0; i < count; i++) {
+    let p;
+    switch (type) {
+      case 0: p = shapeSphere(i, count); break;
+      case 1: p = shapeHeart(i, count); break;
+      case 2: p = shapeFlower(i, count); break;
+      case 3: p = shapeSaturn(i, count); break;
+      case 4: p = shapeFireworks(i, count); break;
+    }
+    const i3 = i * 3;
+    targetPositions[i3] = p.x;
+    targetPositions[i3+1] = p.y;
+    targetPositions[i3+2] = p.z;
+  }
+}
+
+/* ============================================================
+   UI 更新
+============================================================ */
+function updateShapeUI(activeId) {
+  document.querySelectorAll(".shape-icon").forEach((el) => {
+    el.classList.toggle("active", Number(el.dataset.id) === activeId);
+  });
+}
+
+/* ============================================================
+   手勢控制（只用食指滑動）
+============================================================ */
+const controls = {
+  spread: 1.0,
+  colorMode: 0,
+  shapeType: 0,
+  handX: 0,
+};
+
+let lastFingerX = null;
+let swipeLock = false;
+let swipeTimer = 0;
+
+function detectFingerSwipe(x) {
+  if (lastFingerX === null) {
+    lastFingerX = x;
+    return;
+  }
+
+  const dx = x - lastFingerX;
+  lastFingerX = x;
+
+  // 手指停止 → 解鎖
+  if (Math.abs(dx) < 0.005) {
+    swipeTimer++;
+    if (swipeTimer > 5) {
+      swipeLock = false;
+      swipeTimer = 0;
+    }
+    return;
+  }
+
+  if (swipeLock) return;
+
+  // 手指往右滑（鏡像後 x 增加）
+  if (dx > 0.04) {
+    controls.shapeType = (controls.shapeType + 1) % 5;
+    swipeLock = true;
+    return;
+  }
+
+  // 手指往左滑
+  if (dx < -0.04) {
+    controls.shapeType = (controls.shapeType - 1 + 5) % 5;
+    swipeLock = true;
+    return;
+  }
+}
+
+function updateControlsFromHand(landmarks) {
+  if (!landmarks) return;
+
+  const finger = landmarks[8];
+  const x = 1 - finger.x; // 鏡像後的 X
+
+  // 即時滑動感
+  const centeredX = (x - 0.5) * 2;
+  controls.handX += (centeredX - controls.handX) * 0.25;
+
+  // 滑動切換圖案
+  detectFingerSwipe(x);
+
+  // 捏合控制顏色
+  const pinch = Math.hypot(
+    landmarks[4].x - landmarks[8].x,
+    landmarks[4].y - landmarks[8].y
+  );
+
+  if (pinch < 0.03) controls.colorMode = 0;
+  else if (pinch < 0.07) controls.colorMode = 1;
+  else controls.colorMode = 2;
+
+  // 手掌張開控制散佈
+  const palmWidth = Math.hypot(
+    landmarks[1].x - landmarks[17].x,
+    landmarks[1].y - landmarks[17].y
+  );
+  controls.spread = THREE.MathUtils.clamp(palmWidth * 6, 0.3, 3.0);
+}
+
+/* ============================================================
+   MediaPipe Hands
+============================================================ */
+let latestHand = null;
+
+navigator.mediaDevices.getUserMedia({ video: true }).then((stream) => {
+  video.srcObject = stream;
+});
+
+const hands = new Hands({
+  locateFile: (file) =>
+    `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`,
+});
+
+hands.setOptions({
+  maxNumHands: 1,
+  modelComplexity: 1,
+  minDetectionConfidence: 0.7,
+  minTrackingConfidence: 0.7,
+});
+
+hands.onResults((results) => {
+  latestHand =
+    results.multiHandLandmarks && results.multiHandLandmarks.length > 0
+      ? results.multiHandLandmarks[0]
+      : null;
+
+  drawHandOverlay(latestHand);
+});
+
+const cameraMP = new Camera(video, {
+  onFrame: async () => {
+    await hands.send({ image: video });
+  },
+  width: 640,
+  height: 480,
+});
+cameraMP.start();
+
+/* ============================================================
+   動畫 Loop
+============================================================ */
+const clock = new THREE.Clock();
+let lastShape = -1;
+let baseRotationY = 0;
+
+updateShapeTargets(0);
+updateShapeUI(0);
+
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = clock.getDelta();
+
+  if (latestHand) updateControlsFromHand(latestHand);
+
+  if (controls.shapeType !== lastShape) {
+    updateShapeTargets(controls.shapeType);
+    updateShapeUI(controls.shapeType);
+    lastShape = controls.shapeType;
+  }
+
+  const pos = geometry.getAttribute("position").array;
+  const col = geometry.getAttribute("color").array;
+
+  for (let i = 0; i < count; i++) {
+    const i3 = i * 3;
+
+    const tx = targetPositions[i3] * controls.spread;
+    const ty = targetPositions[i3+1] * controls.spread;
+    const tz = targetPositions[i3+2] * controls.spread;
+
+    pos[i3] += (tx - pos[i3]) * 0.1;
+    pos[i3+1] += (ty - pos[i3+1]) * 0.1;
+    pos[i3+2] += (tz - pos[i3+2]) * 0.1;
+
+    let r, g, b;
+    if (controls.colorMode === 0) {
+      r = 0.2; g = 0.7; b = 1.0;
+    } else if (controls.colorMode === 1) {
+      r = 1.0; g = 0.6; b = 0.2;
+    } else {
+      const h = (i / count + clock.elapsedTime * 0.1) % 1;
+      const c = new THREE.Color().setHSL(h, 0.7, 0.5);
+      r = c.r; g = c.g; b = c.b;
     }
 
-    // =========================
-    //  粒子初始化
-    // =========================
-    const count = 5000;
-    const positions = new Float32Array(count * 3);
-    const colors = new Float32Array(count * 3);
-    const targetPositions = new Float32Array(count * 3);
+    col[i3] += (r - col[i3]) * 0.2;
+    col[i3+1] += (g - col[i3+1]) * 0.2;
+    col[i3+2] += (b - col[i3+2]) * 0.2;
+  }
 
-    for (let i = 0; i < count; i++) {
-      const i3 = i * 3;
-      positions[i3 + 0] = (Math.random() - 0.5) * 4;
-      positions[i3 + 1] = (Math.random() - 0.5) * 4;
-      positions[i3 + 2] = (Math.random() - 0.5) * 4;
+  geometry.getAttribute("position").needsUpdate = true;
+  geometry.getAttribute("color").needsUpdate = true;
 
-      colors[i3 + 0] = Math.random();
-      colors[i3 + 1] = Math.random();
-      colors[i3 + 2] = Math.random();
-    }
+  baseRotationY += dt * 0.2;
+  particles.rotation.y = baseRotationY + controls.handX * 0.6;
 
-    const geometry = new THREE.BufferGeometry();
-    geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-    geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+  renderer.render(scene, camera);
+}
 
-    const material = new THREE.PointsMaterial({
-      size: 0.05,
-      vertexColors: true,
-      transparent: true,
-      depthWrite: false,
-    });
+animate();
+</script>
 
-    const particles = new THREE.Points(geometry, material);
-    scene.add(particles);
-
-    // =========================
-    //  粒子形狀模板
-    // =========================
-    function shapeSphere(i, count) {
-      const u = i / count;
-      const theta = Math.acos(2 * u - 1);
-      const phi = Math.random() * Math.PI * 2;
-      const r = 1.0;
-      return new THREE.Vector3(
-        r * Math.sin(theta) * Math.cos(phi),
-        r * Math.cos(theta),
-        r * Math.sin(theta) * Math.sin(phi)
-      );
-    }
-
-    function shapeHeart(i, count) {
-      const t = (i / count) * Math.PI * 2;
-      const r = 0.5;
-      const x = r * 16 * Math.pow(Math.sin(t), 3);
-      const y =
-        r *
-        (13 * Math.cos(t) -
-          5 * Math.cos(2 * t) -
-          2 * Math.cos(3 * t) -
-          Math.cos(4 * t));
-      const z = (Math.random() - 0.5) * 0.2;
-      return new THREE.Vector3(x * 0.05, y * 0.05, z);
-    }
-
-    function shapeFlower(i, count) {
-      const petals = 5;
-      const t = (i / count) * Math.PI * 2;
-      const r = 0.8 + 0.2 * Math.sin(petals * t);
-      return new THREE.Vector3(
-        r * Math.cos(t),
-        r * Math.sin(t),
-        (Math.random() - 0.5) * 0.3
-      );
-    }
-
-    function shapeSaturn(i, count) {
-      if (i < count * 0.7) return shapeSphere(i, count * 0.7);
-      const t = Math.random() * Math.PI * 2;
-      return new THREE.Vector3(
-        1.5 * Math.cos(t),
-        (Math.random() - 0.5) * 0.1,
-        1.5 * Math.sin(t)
-      );
-    }
-
-    function shapeFireworks(i, count) {
-      const t = Math.random() * Math.PI * 2;
-      const u = Math.random() * 2 - 1;
-      const theta = Math.acos(u);
-      const r = 0.2 + Math.random() * 2.0;
-      return new THREE.Vector3(
-        r * Math.sin(theta) * Math.cos(t),
-        r * Math.cos(theta),
-        r * Math.sin(theta) * Math.sin(t)
-      );
-    }
-
-    function updateShapeTargets(type) {
-      for (let i = 0; i < count; i++) {
-        let p;
-        switch (type) {
-          case 0: p = shapeSphere(i, count); break;
-          case 1: p = shapeHeart(i, count); break;
-          case 2: p = shapeFlower(i, count); break;
-          case 3: p = shapeSaturn(i, count); break;
-          case 4: p = shapeFireworks(i, count); break;
-        }
-        const i3 = i * 3;
-        targetPositions[i3 + 0] = p.x;
-        targetPositions[i3 + 1] = p.y;
-        targetPositions[i3 + 2] = p.z;
-      }
-    }
-
-    // =========================
-    //  UI 更新
-    // =========================
-    const shapeNames = ["Sphere", "Heart", "Flower", "Saturn", "Fireworks"];
-    const labelEl = document.querySelector(".shape-icon-label");
-
-    function updateShapeUI(activeId) {
-      document.querySelectorAll(".shape-icon").forEach((el) => {
-        el.classList.toggle("active", Number(el.dataset.id) === activeId);
-      });
-      if (labelEl) {
-        labelEl.textContent =
-          "左右滑動切換圖案 · 現在是：" + shapeNames[activeId] +
-          " · 捏合改變顏色 · 張開改變散佈";
-      }
-    }
-
-    // =========================
-    //  手勢控制參數
-    // =========================
-    const controls = {
-      spread: 1.0,
-      colorMode: 0,
-      shapeType: 0,
-      handX: 0,          // -1 ~ 1，用來做滑動感
-    };
-
-    function distance2D(a, b) {
-      return Math.hypot(a.x - b.x, a.y - b.y);
-    }
-
-    // =========================
-    //  撥動偵測（一次換一個圖）
-    // =========================
-    let lastX = null;
-    let swipeLock = false;
-    let swipeTimer = 0;
-
-    function detectSwipe(wristX) {
-      if (lastX === null) {
-        lastX = wristX;
-        return;
-      }
-
-      const dx = wristX - lastX;
-      lastX = wristX;
-
-      // 手停下來一小段時間 → 解鎖
-      if (Math.abs(dx) < 0.01) {
-        swipeTimer++;
-        if (swipeTimer > 5) {
-          swipeLock = false;
-          swipeTimer = 0;
-        }
-        return;
-      }
-
-      if (swipeLock) return;
-
-      // 注意：因為畫面已鏡像，所以這裡的方向是直覺的：
-      // 手往右滑（畫面上）→ wristX 實際變小 → dx < 0 → 下一個圖
-      if (dx < -0.04) {
-        controls.shapeType = (controls.shapeType + 1) % 5;
-        swipeLock = true;
-        return;
-      }
-
-      // 手往左滑 → wristX 變大 → dx > 0 → 上一個圖
-      if (dx > 0.04) {
-        controls.shapeType = (controls.shapeType - 1 + 5) % 5;
-        swipeLock = true;
-        return;
-      }
-    }
-
-    // =========================
-    //  手勢控制整合
-    // =========================
-    function updateControlsFromHand(landmarks) {
-      if (!landmarks) return;
-
-      const wrist = landmarks[0];
-
-      // 轉成畫面上的鏡像 X（0 左 → 1 右）
-      const mirroredX = 1 - wrist.x;
-
-      // 即時「滑動感」：用手的水平位置控制一點點旋轉偏移
-      const centeredX = (mirroredX - 0.5) * 2; // -1 ~ 1
-      controls.handX += (centeredX - controls.handX) * 0.2;
-
-      // 撥動偵測用原始 wrist.x（不鏡像也可以，對邏輯已處理）
-      detectSwipe(wrist.x);
-
-      // 手掌張開控制散佈
-      const palmWidth = distance2D(landmarks[1], landmarks[17]);
-      controls.spread = THREE.MathUtils.clamp(palmWidth * 5, 0.3, 3.0);
-
-      // 捏合控制顏色模式
-      const indexTip = landmarks[8];
-      const thumbTip = landmarks[4];
-      const pinch = distance2D(thumbTip, indexTip);
-
-      if (pinch < 0.05) controls.colorMode = 0;
-      else if (pinch < 0.1) controls.colorMode = 1;
-      else controls.colorMode = 2;
-    }
-
-    // =========================
-    //  MediaPipe Hands
-    // =========================
-    let latestHand = null;
-
-    navigator.mediaDevices.getUserMedia({ video: true }).then((stream) => {
-      video.srcObject = stream;
-    });
-
-    const hands = new Hands({
-      locateFile: (file) =>
-        `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`,
-    });
-
-    hands.setOptions({
-      maxNumHands: 1,
-      modelComplexity: 1,
-      minDetectionConfidence: 0.7,
-      minTrackingConfidence: 0.7,
-    });
-
-    hands.onResults((results) => {
-      latestHand =
-        results.multiHandLandmarks && results.multiHandLandmarks.length > 0
-          ? results.multiHandLandmarks[0]
-          : null;
-
-      drawHandOverlay(latestHand);
-    });
-
-    const cameraMP = new Camera(video, {
-      onFrame: async () => {
-        await hands.send({ image: video });
-      },
-      width: 640,
-      height: 480,
-    });
-    cameraMP.start();
-
-    // =========================
-    //  動畫 Loop
-    // =========================
-    const clock = new THREE.Clock();
-    let lastShape = -1;
-    let baseRotationY = 0;
-
-    updateShapeTargets(0);
-    updateShapeUI(0);
-
-    function animate() {
-      requestAnimationFrame(animate);
-      const dt = clock.getDelta();
-
-      if (latestHand) {
-        updateControlsFromHand(latestHand);
-      }
-
-      if (controls.shapeType !== lastShape) {
-        updateShapeTargets(controls.shapeType);
-        updateShapeUI(controls.shapeType);
-        lastShape = controls.shapeType;
-      }
-
-      const pos = geometry.getAttribute("position").array;
-      const col = geometry.getAttribute("color").array;
-
-      for (let i = 0; i < count; i++) {
-        const i3 = i * 3;
-
-        const tx = targetPositions[i3 + 0] * controls.spread;
-        const ty = targetPositions[i3 + 1] * controls.spread;
-        const tz = targetPositions[i3 + 2] * controls.spread;
-
-        pos[i3 + 0] += (tx - pos[i3 + 0]) * 0.1;
-        pos[i3 + 1] += (ty - pos[i3 + 1]) * 0.1;
-        pos[i3 + 2] += (tz - pos[i3 + 2]) * 0.1;
-
-        let r, g, b;
-        if (controls.colorMode === 0) {
-          r = 0.2; g = 0.7; b = 1.0;
-        } else if (controls.colorMode === 1) {
-          r = 1.0; g = 0.6; b = 0.2;
-        } else {
-          const h = (i / count + clock.elapsedTime * 0.1) % 1;
-          const c = new THREE.Color().setHSL(h, 0.7, 0.5);
-          r = c.r; g = c.g; b = c.b;
-        }
-
-        col[i3 + 0] += (r - col[i3 + 0]) * 0.2;
-        col[i3 + 1] += (g - col[i3 + 1]) * 0.2;
-        col[i3 + 2] += (b - col[i3 + 2]) * 0.2;
-      }
-
-      geometry.getAttribute("position").needsUpdate = true;
-      geometry.getAttribute("color").needsUpdate = true;
-
-      baseRotationY += dt * 0.2;
-      particles.rotation.y = baseRotationY + controls.handX * 0.6;
-
-      renderer.render(scene, camera);
-    }
-
-    animate();
-  </script>
 </body>
 </html>
