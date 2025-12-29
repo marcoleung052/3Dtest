@@ -145,8 +145,8 @@
     ============================================================ */
     const overlay = document.getElementById("overlay");
     const ctx = overlay.getContext("2d");
-    overlay.width = 640;
-    overlay.height = 480;
+    overlay.width = 320;
+    overlay.height = 240;
 
     const video = document.getElementById("video");
 
@@ -175,7 +175,7 @@
     /* ============================================================
        粒子初始化
     ============================================================ */
-    const count = 5000;
+    const count = 8000;
     const positions = new Float32Array(count * 3);
     const colors = new Float32Array(count * 3);
     const targetPositions = new Float32Array(count * 3);
