@@ -15,6 +15,30 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
 
 // =========================
+//  Overlay Canvas（鏡頭 + 點）
+// =========================
+const overlay = document.getElementById("overlay");
+const ctx = overlay.getContext("2d");
+overlay.width = 640;
+overlay.height = 480;
+
+function drawHandOverlay(landmarks) {
+  ctx.clearRect(0, 0, overlay.width, overlay.height);
+  ctx.drawImage(video, 0, 0, overlay.width, overlay.height);
+
+  if (!landmarks) return;
+
+  ctx.fillStyle = "rgba(0,255,0,0.8)";
+  for (let i = 0; i < landmarks.length; i++) {
+    const x = landmarks[i].x * overlay.width;
+    const y = landmarks[i].y * overlay.height;
+    ctx.beginPath();
+    ctx.arc(x, y, 6, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+// =========================
 //  粒子初始化
 // =========================
 const count = 5000;
@@ -127,6 +151,15 @@ function updateShapeTargets(type) {
 }
 
 // =========================
+//  UI 更新
+// =========================
+function updateShapeUI(activeId) {
+  document.querySelectorAll(".shape-icon").forEach((el) => {
+    el.classList.toggle("active", Number(el.dataset.id) === activeId);
+  });
+}
+
+// =========================
 //  手勢控制參數
 // =========================
 const controls = {
@@ -140,7 +173,7 @@ function distance2D(a, b) {
 }
 
 // =========================
-//  撥動偵測（一次撥一下只換一個圖）
+//  撥動偵測（一次換一個圖）
 // =========================
 let lastX = null;
 let swipeLock = false;
@@ -155,7 +188,6 @@ function detectSwipe(wristX) {
   const dx = wristX - lastX;
   lastX = wristX;
 
-  // 手停止 → 解鎖
   if (Math.abs(dx) < 0.01) {
     swipeTimer++;
     if (swipeTimer > 5) {
@@ -167,14 +199,12 @@ function detectSwipe(wristX) {
 
   if (swipeLock) return;
 
-  // 撥右
   if (dx > 0.04) {
     controls.shapeType = (controls.shapeType + 1) % 5;
     swipeLock = true;
     return;
   }
 
-  // 撥左
   if (dx < -0.04) {
     controls.shapeType = (controls.shapeType - 1 + 5) % 5;
     swipeLock = true;
@@ -230,6 +260,8 @@ hands.onResults((results) => {
     results.multiHandLandmarks && results.multiHandLandmarks.length > 0
       ? results.multiHandLandmarks[0]
       : null;
+
+  drawHandOverlay(latestHand);
 });
 
 const cameraMP = new Camera(video, {
@@ -255,6 +287,7 @@ function animate() {
 
   if (controls.shapeType !== lastShape) {
     updateShapeTargets(controls.shapeType);
+    updateShapeUI(controls.shapeType);
     lastShape = controls.shapeType;
   }
 
