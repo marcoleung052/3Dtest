@@ -13,6 +13,12 @@ let particles, renderMaterial, simMaterial;
 
 let latestHand = null;   // ← 必須放在這裡（全域變數）
 
+const controls = {
+  spread: 1.0,
+  shape: 0,
+  colorMode: 0,
+};
+
 const clock = new THREE.Clock();
 
 // 啟動流程
@@ -277,11 +283,6 @@ function initParticles() {
 // =====================================================
 // 手勢控制
 // =====================================================
-const controls = {
-  spread: 1.0,
-  shape: 0,
-  colorMode: 0,
-};
 
 function initHandTracking() {
   const video = document.getElementById("video");
