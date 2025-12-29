@@ -139,28 +139,47 @@ function distance2D(a, b) {
   return Math.hypot(a.x - b.x, a.y - b.y);
 }
 
+// ===== 新增：撥動偵測 =====
+let lastX = null;
+let swipeCooldown = 0;
+
+// =========================
+//  手勢控制（整合撥左撥右）
+// =========================
 function updateControlsFromHand(landmarks) {
   if (!landmarks) return;
 
   const wrist = landmarks[0];
   const indexTip = landmarks[8];
   const thumbTip = landmarks[4];
-  const pinky = landmarks[17];
 
+  // ======== 撥動偵測 ========
+  if (lastX !== null) {
+    const dx = wrist.x - lastX;
+
+    if (swipeCooldown <= 0) {
+      if (dx > 0.05) {
+        controls.shapeType = (controls.shapeType + 1) % 5;
+        swipeCooldown = 20;
+      } else if (dx < -0.05) {
+        controls.shapeType = (controls.shapeType - 1 + 5) % 5;
+        swipeCooldown = 20;
+      }
+    }
+  }
+
+  lastX = wrist.x;
+  if (swipeCooldown > 0) swipeCooldown--;
+
+  // ======== 手掌張開控制 spread ========
   const palmWidth = distance2D(landmarks[1], landmarks[17]);
   controls.spread = THREE.MathUtils.clamp(palmWidth * 5, 0.3, 3.0);
 
+  // ======== 捏合控制顏色模式 ========
   const pinch = distance2D(thumbTip, indexTip);
   if (pinch < 0.05) controls.colorMode = 0;
   else if (pinch < 0.1) controls.colorMode = 1;
   else controls.colorMode = 2;
-
-  const cx = (wrist.x + indexTip.x + pinky.x) / 3;
-  if (cx < 0.33) controls.shapeType = 0;
-  else if (cx < 0.5) controls.shapeType = 1;
-  else if (cx < 0.66) controls.shapeType = 2;
-  else if (cx < 0.8) controls.shapeType = 3;
-  else controls.shapeType = 4;
 }
 
 // =========================
