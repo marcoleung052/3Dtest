@@ -1,6 +1,5 @@
-console.log("main.js loaded version X");
 // =====================================================
-// 基本設定
+// 全域變數（所有會被 function 使用的都放這裡）
 // =====================================================
 const SIZE = 256;
 const NUM = SIZE * SIZE;
@@ -9,9 +8,12 @@ let renderer, scene, camera;
 let simScene, simCamera;
 let posRT_A, posRT_B;
 let velRT_A, velRT_B;
-let particles, renderMaterial, simMaterial;
 
-let latestHand = null;   // ← 必須放在這裡（全域變數）
+let particles;
+let renderMaterial;
+let simMaterial;
+
+let latestHand = null;
 
 const controls = {
   spread: 1.0,
@@ -21,7 +23,9 @@ const controls = {
 
 const clock = new THREE.Clock();
 
-// 啟動流程
+// =====================================================
+// 啟動流程（順序非常重要）
+// =====================================================
 initThree();
 initGPGPU();
 initParticles();
@@ -69,7 +73,7 @@ function createRT() {
 }
 
 // =====================================================
-// 初始化 GPGPU（模擬用貼圖）
+// 初始化 GPGPU（模擬貼圖）
 // =====================================================
 function initGPGPU() {
   posRT_A = createRT();
@@ -77,7 +81,7 @@ function initGPGPU() {
   velRT_A = createRT();
   velRT_B = createRT();
 
-  // 初始化位置貼圖
+  // 初始化位置
   const initPos = new Float32Array(NUM * 4);
   for (let i = 0; i < NUM; i++) {
     const i4 = i * 4;
@@ -86,28 +90,16 @@ function initGPGPU() {
     initPos[i4 + 2] = (Math.random() - 0.5) * 2;
     initPos[i4 + 3] = 1.0;
   }
-  const texPos = new THREE.DataTexture(
-    initPos,
-    SIZE,
-    SIZE,
-    THREE.RGBAFormat,
-    THREE.FloatType
-  );
+  const texPos = new THREE.DataTexture(initPos, SIZE, SIZE, THREE.RGBAFormat, THREE.FloatType);
   texPos.needsUpdate = true;
 
   renderer.setRenderTarget(posRT_A);
   renderer.clear();
   renderer.copyTextureToTexture(new THREE.Vector2(0, 0), texPos, posRT_A.texture);
 
-  // 初始化速度貼圖（全部 0）
+  // 初始化速度
   const initVel = new Float32Array(NUM * 4);
-  const texVel = new THREE.DataTexture(
-    initVel,
-    SIZE,
-    SIZE,
-    THREE.RGBAFormat,
-    THREE.FloatType
-  );
+  const texVel = new THREE.DataTexture(initVel, SIZE, SIZE, THREE.RGBAFormat, THREE.FloatType);
   texVel.needsUpdate = true;
 
   renderer.setRenderTarget(velRT_A);
@@ -115,7 +107,7 @@ function initGPGPU() {
   renderer.copyTextureToTexture(new THREE.Vector2(0, 0), texVel, velRT_A.texture);
   renderer.setRenderTarget(null);
 
-  // 模擬場景（全螢幕平面）
+  // 模擬場景
   simScene = new THREE.Scene();
   simCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
 
@@ -147,9 +139,6 @@ function initGPGPU() {
       uniform float u_spread;
       uniform int u_shape;
 
-      // -------------------------
-      // 形狀模板（GPU 版）
-      // -------------------------
       vec3 shapeSphere(vec2 uv) {
         float x = uv.x * 2.0 - 1.0;
         float y = uv.y * 2.0 - 1.0;
@@ -170,22 +159,22 @@ function initGPGPU() {
       vec3 shapeFlower(vec2 uv) {
         float t = uv.x * 6.2831853;
         float r = 0.8 + 0.2 * sin(5.0 * t);
-        return vec3(r * cos(t), r * sin(t), 0.0);
+        return vec3(r*cos(t), r*sin(t), 0.0);
       }
 
       vec3 shapeStar(vec2 uv) {
         float t = uv.x * 6.2831853;
         float band = floor(uv.y * 10.0);
         float r = mod(band, 2.0) == 0.0 ? 1.0 : 0.4;
-        return vec3(r * cos(t), r * sin(t), 0.0);
+        return vec3(r*cos(t), r*sin(t), 0.0);
       }
 
       vec3 shapeSaturn(vec2 uv) {
         float t = uv.x * 6.2831853;
         if (uv.y < 0.7) {
-          return vec3(0.6 * cos(t), 0.6 * sin(t), 0.0);
+          return vec3(0.6*cos(t), 0.6*sin(t), 0.0);
         } else {
-          return vec3(1.2 * cos(t), 0.0, 1.2 * sin(t));
+          return vec3(1.2*cos(t), 0.0, 1.2*sin(t));
         }
       }
 
@@ -215,8 +204,7 @@ function initGPGPU() {
     `,
   });
 
-  const simMesh = new THREE.Mesh(simPlane, simMaterial);
-  simScene.add(simMesh);
+  simScene.add(new THREE.Mesh(simPlane, simMaterial));
 }
 
 // =====================================================
@@ -283,18 +271,12 @@ function initParticles() {
 // =====================================================
 // 手勢控制
 // =====================================================
-
 function initHandTracking() {
   const video = document.getElementById("video");
 
-  navigator.mediaDevices
-    .getUserMedia({ video: true })
-    .then((stream) => {
-      video.srcObject = stream;
-    })
-    .catch((err) => {
-      console.warn("Camera permission denied or not available:", err);
-    });
+  navigator.mediaDevices.getUserMedia({ video: true }).then((stream) => {
+    video.srcObject = stream;
+  });
 
   const hands = new Hands({
     locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`,
@@ -308,15 +290,11 @@ function initHandTracking() {
   });
 
   hands.onResults((res) => {
-    latestHand = res.multiHandLandmarks && res.multiHandLandmarks.length > 0
-      ? res.multiHandLandmarks[0]
-      : null;
+    latestHand = res.multiHandLandmarks?.[0] || null;
   });
 
   const cam = new Camera(video, {
-    onFrame: async () => {
-      await hands.send({ image: video });
-    },
+    onFrame: async () => hands.send({ image: video }),
     width: 640,
     height: 480,
   });
@@ -331,24 +309,21 @@ function updateHandControls() {
   const thumb = latestHand[4];
   const pinky = latestHand[17];
 
-  // spread：手掌寬度
   const palm = Math.hypot(
     latestHand[1].x - latestHand[17].x,
     latestHand[1].y - latestHand[17].y
   );
   controls.spread = THREE.MathUtils.clamp(palm * 5, 0.3, 3.0);
 
-  // colorMode：拇指 + 食指距離
   const pinch = Math.hypot(index.x - thumb.x, index.y - thumb.y);
   controls.colorMode = pinch < 0.05 ? 0 : pinch < 0.1 ? 1 : 2;
 
-  // shape：手掌水平位置
   const cx = (wrist.x + index.x + pinky.x) / 3.0;
-  if (cx < 0.2) controls.shape = 0;      // 球
-  else if (cx < 0.4) controls.shape = 1; // 心
-  else if (cx < 0.6) controls.shape = 2; // 花
-  else if (cx < 0.8) controls.shape = 3; // 土星
-  else controls.shape = 4;               // 星星
+  if (cx < 0.2) controls.shape = 0;
+  else if (cx < 0.4) controls.shape = 1;
+  else if (cx < 0.6) controls.shape = 2;
+  else if (cx < 0.8) controls.shape = 3;
+  else controls.shape = 4;
 }
 
 // =====================================================
@@ -367,7 +342,6 @@ function simulate(dt) {
   renderer.render(simScene, simCamera);
   renderer.setRenderTarget(null);
 
-  // swap position RT
   let tmp = posRT_A;
   posRT_A = posRT_B;
   posRT_B = tmp;
