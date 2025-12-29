@@ -115,10 +115,10 @@
   <div id="messageBox">Hello Marco!</div>
 
   <!-- 你的圖片（放在 GitHub 同資料夾） -->
-  <img id="shapeImage" src="xxxx.png" style="display:none;">
+  <img id="shapeImage" src="google-translate.png" style="display:none;">
 
   <script>
-    /* ============================================================
+        /* ============================================================
        Three.js 基本場景
     ============================================================ */
     const scene = new THREE.Scene();
@@ -205,7 +205,8 @@
 
     const particles = new THREE.Points(geometry, material);
     scene.add(particles);
-        /* ============================================================
+
+    /* ============================================================
        圖片轉粒子形狀（位置 + 顏色）
     ============================================================ */
     let imageShapePoints = null;
@@ -262,6 +263,58 @@
     };
 
     /* ============================================================
+       文字轉粒子（Canvas → 粒子）
+    ============================================================ */
+    let textShapePoints = null;
+
+    function shapeFromText(text, count, callback) {
+      const canvas = document.createElement("canvas");
+      const ctx = canvas.getContext("2d");
+
+      canvas.width = 400;
+      canvas.height = 200;
+
+      ctx.fillStyle = "black";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      ctx.fillStyle = "white";
+      ctx.font = "bold 120px sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(text, canvas.width / 2, canvas.height / 2);
+
+      const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+      const points = [];
+
+      for (let y = 0; y < canvas.height; y += 3) {
+        for (let x = 0; x < canvas.width; x += 3) {
+          const i = (y * canvas.width + x) * 4;
+          const a = data[i + 3];
+
+          if (a > 128) {
+            const nx = (x / canvas.width) * 2 - 1;
+            const ny = -(y / canvas.height) * 2 + 1;
+
+            points.push({
+              pos: new THREE.Vector3(nx, ny, 0),
+              color: { r: 1, g: 1, b: 1 }
+            });
+          }
+        }
+      }
+
+      const result = [];
+      for (let i = 0; i < count; i++) {
+        const p = points[Math.floor(Math.random() * points.length)];
+        result.push({
+          pos: p.pos.clone(),
+          color: { r: p.color.r, g: p.color.g, b: p.color.b }
+        });
+      }
+
+      callback(result);
+    }
+        /* ============================================================
        粒子形狀模板
     ============================================================ */
     function shapeSphere(i, count) {
@@ -330,6 +383,9 @@
       );
     }
 
+    /* ============================================================
+       更新粒子目標位置
+    ============================================================ */
     function updateShapeTargets(type) {
       for (let i = 0; i < count; i++) {
         let p;
@@ -340,16 +396,20 @@
           case 2: p = shapeFlower(i, count); break;
           case 3: p = shapeSaturn(i, count); break;
           case 4: p = shapeFireworks(i, count); break;
+
           case 5:
             p = imageShapePoints
               ? imageShapePoints[i].pos
               : new THREE.Vector3(0, 0, 0);
             break;
+
           case 6:
-            // 💬 文字模式：粒子不需要目標位置
+            // UI 文字模式：粒子不顯示
             p = new THREE.Vector3(999, 999, 999);
             break;
+
           case 7:
+            // 粒子文字模式
             p = textShapePoints
               ? textShapePoints[i].pos
               : new THREE.Vector3(0, 0, 0);
@@ -408,7 +468,7 @@
       }
 
       if (dx < -0.05) {
-        controls.shapeType = (controls.shapeType - 1 + 7) % 7;
+        controls.shapeType = (controls.shapeType - 1 + 8) % 8;
         swipeLocked = true;
         return;
       }
@@ -475,7 +535,6 @@
       );
       controls.spread = THREE.MathUtils.clamp(palmWidth * 6, 0.3, 3.0);
     }
-
         /* ============================================================
        MediaPipe Hands
     ============================================================ */
@@ -516,78 +575,25 @@
     cameraMP.start();
 
     /* ============================================================
-       文字轉粒子形狀（Canvas → 粒子）
-    ============================================================ */
-    let textShapePoints = null;
-    
-    function shapeFromText(text, count, callback) {
-      const canvas = document.createElement("canvas");
-      const ctx = canvas.getContext("2d");
-    
-      canvas.width = 400;
-      canvas.height = 200;
-    
-      ctx.fillStyle = "black";
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-    
-      ctx.fillStyle = "white";
-      ctx.font = "bold 120px sans-serif";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText(text, canvas.width / 2, canvas.height / 2);
-    
-      const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
-      const points = [];
-    
-      for (let y = 0; y < canvas.height; y += 3) {
-        for (let x = 0; x < canvas.width; x += 3) {
-          const i = (y * canvas.width + x) * 4;
-          const a = data[i + 3];
-    
-          if (a > 128) {
-            const nx = (x / canvas.width) * 2 - 1;
-            const ny = -(y / canvas.height) * 2 + 1;
-    
-            points.push({
-              pos: new THREE.Vector3(nx, ny, 0),
-              color: { r: 1, g: 1, b: 1 }
-            });
-          }
-        }
-      }
-    
-      const result = [];
-      for (let i = 0; i < count; i++) {
-        const p = points[Math.floor(Math.random() * points.length)];
-        result.push({
-          pos: p.pos.clone(),
-          color: { r: p.color.r, g: p.color.g, b: p.color.b }
-        });
-      }
-    
-      callback(result);
-    }
-
-    /* ============================================================
        動畫 Loop
     ============================================================ */
     const clock = new THREE.Clock();
     let lastShape = -1;
     let baseRotationY = 0;
-    
+
     updateShapeTargets(0);
     updateShapeUI(0);
-    
+
     function animate() {
       requestAnimationFrame(animate);
       const dt = clock.getDelta();
-    
+
       if (latestHand) updateControlsFromHand(latestHand);
-    
+
       /* 切換 shape 時更新目標位置 */
       if (controls.shapeType !== lastShape) {
-    
-        // 文字粒子模式（shapeType = 7）
+
+        // 粒子文字模式（shapeType = 7）
         if (controls.shapeType === 7) {
           shapeFromText("MARCO", count, (pts) => {
             textShapePoints = pts;
@@ -596,10 +602,10 @@
         } else {
           updateShapeTargets(controls.shapeType);
         }
-    
+
         updateShapeUI(controls.shapeType);
-    
-        // 💬 UI 文字模式（shapeType = 6）
+
+        // UI 文字模式（shapeType = 6）
         if (controls.shapeType === 6) {
           document.getElementById("messageBox").style.display = "block";
           particles.visible = false;
@@ -607,29 +613,29 @@
           document.getElementById("messageBox").style.display = "none";
           particles.visible = true;
         }
-    
+
         lastShape = controls.shapeType;
       }
-    
+
       /* 粒子更新（排除 shapeType 6 & 7） */
       if (controls.shapeType !== 6 && controls.shapeType !== 7) {
-    
+
         const pos = geometry.getAttribute("position").array;
         const col = geometry.getAttribute("color").array;
-    
+
         for (let i = 0; i < count; i++) {
           const i3 = i * 3;
-    
+
           const tx = targetPositions[i3]     * controls.spread;
           const ty = targetPositions[i3 + 1] * controls.spread;
           const tz = targetPositions[i3 + 2] * controls.spread;
-    
+
           pos[i3]     += (tx - pos[i3])     * 0.1;
           pos[i3 + 1] += (ty - pos[i3 + 1]) * 0.1;
           pos[i3 + 2] += (tz - pos[i3 + 2]) * 0.1;
-    
+
           let r, g, b;
-    
+
           // 圖片粒子顏色
           if (controls.shapeType === 5 && imageShapePoints) {
             const cImg = imageShapePoints[i].color;
@@ -637,7 +643,7 @@
             g = cImg.g;
             b = cImg.b;
           }
-          // 文字粒子顏色
+          // 粒子文字顏色
           else if (controls.shapeType === 7 && textShapePoints) {
             const cTxt = textShapePoints[i].color;
             r = cTxt.r;
@@ -656,20 +662,20 @@
               r = c.r; g = c.g; b = c.b;
             }
           }
-    
+
           col[i3]     += (r - col[i3])     * 0.2;
           col[i3 + 1] += (g - col[i3 + 1]) * 0.2;
           col[i3 + 2] += (b - col[i3 + 2]) * 0.2;
         }
-    
+
         geometry.getAttribute("position").needsUpdate = true;
         geometry.getAttribute("color").needsUpdate = true;
       }
-    
+
       /* 粒子旋轉（手腕控制） */
       baseRotationY += dt * 0.2;
       particles.rotation.y = baseRotationY + controls.handX * 1.2;
-    
+
       renderer.render(scene, camera);
     }
 
