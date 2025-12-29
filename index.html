@@ -453,28 +453,33 @@
           case 8:
             if (imageShapePoints && textShapePoints &&
                 imageShapePoints[i] && textShapePoints[i]) {
-              const imgP = imageShapePoints[i].pos;
-              const txtP = textShapePoints[i].pos;
-
-              const mix = 0.5;
-              const mx = imgP.x * mix + txtP.x * (1 - mix);
-              const my = imgP.y * mix + txtP.y * (1 - mix);
-              const mz = imgP.z * mix + txtP.z * (1 - mix);
-
-              const jitter = 0.02;
-              p = new THREE.Vector3(
-                mx + (Math.random() - 0.5) * jitter,
-                my + (Math.random() - 0.5) * jitter,
-                mz + (Math.random() - 0.5) * jitter
-              );
+          
+              // 左邊：圖片 (-1.2 shift)
+              const imgP = imageShapePoints[i].pos.clone();
+              imgP.x -= 1.2;   // 左移
+          
+              // 右邊：文字 (+1.2 shift)
+              const txtP = textShapePoints[i].pos.clone();
+              txtP.x += 1.2;   // 右移
+          
+              // 一半粒子用圖片，一半用文字
+              if (i % 2 === 0) {
+                p = imgP;
+              } else {
+                p = txtP;
+              }
+          
             } else if (imageShapePoints && imageShapePoints[i]) {
-              p = imageShapePoints[i].pos.clone();
+              // fallback：只有圖片
+              p = imageShapePoints[i].pos.clone().add(new THREE.Vector3(-1.2, 0, 0));
             } else if (textShapePoints && textShapePoints[i]) {
-              p = textShapePoints[i].pos.clone();
+              // fallback：只有文字
+              p = textShapePoints[i].pos.clone().add(new THREE.Vector3(1.2, 0, 0));
             } else {
               p = new THREE.Vector3(0, 0, 0);
             }
             break;
+
 
           default:
             p = new THREE.Vector3(0, 0, 0);
