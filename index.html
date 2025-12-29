@@ -1,9 +1,8 @@
-
 <!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8" />
-  <title>Finger Swipe Particle Shapes</title>
+  <title>Gesture Particle System</title>
 
   <style>
     body {
@@ -107,15 +106,15 @@
     <div class="shape-icon" data-id="5">🖼️</div>
     <div class="shape-icon" data-id="6">💬</div>
     <div class="shape-icon" data-id="7">🔤</div>
+    <div class="shape-icon" data-id="8">🖼️+🔤</div>
   </div>
 
   <div class="shape-icon-label">
-    用食指滑動切換圖案 · 捏合改變顏色 · 張開改變散佈 · 點一下切換顏色 · 手腕旋轉旋轉粒子
+    滑動切換 · 前戳切換顏色 · pinch 放大縮小 · 手腕旋轉
   </div>
 
   <div id="messageBox">Hello Marco!</div>
 
-  <!-- 你的圖片（放在 GitHub 同資料夾） -->
   <img id="shapeImage" src="google-translate.png" style="display:none;">
 
   <script>
@@ -146,8 +145,8 @@
     ============================================================ */
     const overlay = document.getElementById("overlay");
     const ctx = overlay.getContext("2d");
-    overlay.width = 320;
-    overlay.height = 240;
+    overlay.width = 640;
+    overlay.height = 480;
 
     const video = document.getElementById("video");
 
@@ -176,7 +175,7 @@
     /* ============================================================
        粒子初始化
     ============================================================ */
-    const count = 8000;
+    const count = 5000;
     const positions = new Float32Array(count * 3);
     const colors = new Float32Array(count * 3);
     const targetPositions = new Float32Array(count * 3);
@@ -264,67 +263,63 @@
     };
 
     /* ============================================================
-       文字轉粒子（Canvas → 粒子）
+       文字轉粒子（自動調整字體大小）
     ============================================================ */
     let textShapePoints = null;
 
     function shapeFromText(text, count, callback) {
-  const canvas = document.createElement("canvas");
-  const ctx = canvas.getContext("2d");
+      const canvas = document.createElement("canvas");
+      const ctx = canvas.getContext("2d");
 
-  canvas.width = 500;
-  canvas.height = 200;
+      canvas.width = 500;
+      canvas.height = 200;
 
-  // 背景透明
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  // 自動調整字體大小
-  let fontSize = 150;
-  ctx.font = `bold ${fontSize}px sans-serif`;
+      let fontSize = 150;
+      ctx.font = `bold ${fontSize}px sans-serif`;
 
-  // 如果字太寬 → 自動縮小
-  while (ctx.measureText(text).width > canvas.width * 0.9) {
-    fontSize -= 10;
-    ctx.font = `bold ${fontSize}px sans-serif`;
-  }
+      while (ctx.measureText(text).width > canvas.width * 0.9) {
+        fontSize -= 10;
+        ctx.font = `bold ${fontSize}px sans-serif`;
+      }
 
-  ctx.fillStyle = "white";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText(text, canvas.width / 2, canvas.height / 2);
+      ctx.fillStyle = "white";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(text, canvas.width / 2, canvas.height / 2);
 
-  const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
-  const points = [];
+      const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+      const points = [];
 
-  // 取樣密度更高
-  for (let y = 0; y < canvas.height; y += 2) {
-    for (let x = 0; x < canvas.width; x += 2) {
-      const i = (y * canvas.width + x) * 4;
-      const a = data[i + 3];
+      for (let y = 0; y < canvas.height; y += 2) {
+        for (let x = 0; x < canvas.width; x += 2) {
+          const i = (y * canvas.width + x) * 4;
+          const a = data[i + 3];
 
-      if (a > 128) {
-        const nx = (x / canvas.width) * 2 - 1;
-        const ny = -(y / canvas.height) * 2 + 1;
+          if (a > 128) {
+            const nx = (x / canvas.width) * 2 - 1;
+            const ny = -(y / canvas.height) * 2 + 1;
 
-        points.push({
-          pos: new THREE.Vector3(nx, ny, 0),
-          color: { r: 1, g: 1, b: 1 }
+            points.push({
+              pos: new THREE.Vector3(nx, ny, 0),
+              color: { r: 1, g: 1, b: 1 }
+            });
+          }
+        }
+      }
+
+      const result = [];
+      for (let i = 0; i < count; i++) {
+        const p = points[Math.floor(Math.random() * points.length)];
+        result.push({
+          pos: p.pos.clone(),
+          color: { r: p.color.r, g: p.color.g, b: p.color.b }
         });
       }
+
+      callback(result);
     }
-  }
-
-  const result = [];
-  for (let i = 0; i < count; i++) {
-    const p = points[Math.floor(Math.random() * points.length)];
-    result.push({
-      pos: p.pos.clone(),
-      color: { r: p.color.r, g: p.color.g, b: p.color.b }
-    });
-  }
-
-  callback(result);
-}
         /* ============================================================
        粒子形狀模板
     ============================================================ */
@@ -395,7 +390,7 @@
     }
 
     /* ============================================================
-       更新粒子目標位置
+       更新粒子目標位置（含 shapeType 8）
     ============================================================ */
     function updateShapeTargets(type) {
       for (let i = 0; i < count; i++) {
@@ -415,15 +410,28 @@
             break;
 
           case 6:
-            // UI 文字模式：粒子不顯示
             p = new THREE.Vector3(999, 999, 999);
             break;
 
           case 7:
-            // 粒子文字模式
             p = textShapePoints
               ? textShapePoints[i].pos
               : new THREE.Vector3(0, 0, 0);
+            break;
+
+          case 8:
+            if (imageShapePoints && textShapePoints) {
+              const imgP = imageShapePoints[i].pos;
+              const txtP = textShapePoints[i].pos;
+
+              p = new THREE.Vector3(
+                (imgP.x + txtP.x) * 0.5,
+                (imgP.y + txtP.y) * 0.5,
+                (imgP.z + txtP.z) * 0.5
+              );
+            } else {
+              p = new THREE.Vector3(0, 0, 0);
+            }
             break;
         }
 
@@ -473,40 +481,45 @@
       if (swipeLocked) return;
 
       if (dx > 0.05) {
-        controls.shapeType = (controls.shapeType + 1) % 8;
+        controls.shapeType = (controls.shapeType + 1) % 9;
         swipeLocked = true;
         return;
       }
 
       if (dx < -0.05) {
-        controls.shapeType = (controls.shapeType - 1 + 8) % 8;
+        controls.shapeType = (controls.shapeType - 1 + 9) % 9;
         swipeLocked = true;
         return;
       }
     }
 
     /* ============================================================
-       點擊偵測（Tap）
+       前戳（Forward Tap）偵測：食指往前推一下
     ============================================================ */
-    let tapCooldown = 0;
-    let wasClose = false;
+    let lastZ = null;
+    let tapZCooldown = 0;
 
-    function detectTap(landmarks) {
-      const d = Math.hypot(
-        landmarks[4].x - landmarks[8].x,
-        landmarks[4].y - landmarks[8].y
-      );
+    function detectForwardTap(landmarks) {
+      const finger = landmarks[8];
+      const z = finger.z;
 
-      const isClose = d < 0.03;
-
-      if (isClose && !wasClose && tapCooldown <= 0) {
-        controls.colorMode = (controls.colorMode + 1) % 3;
-        tapCooldown = 20;
+      if (lastZ === null) {
+        lastZ = z;
+        return;
       }
 
-      wasClose = isClose;
+      const dz = lastZ - z;
+      lastZ = z;
 
-      if (tapCooldown > 0) tapCooldown--;
+      if (tapZCooldown > 0) {
+        tapZCooldown--;
+        return;
+      }
+
+      if (dz > 0.015) {
+        controls.colorMode = (controls.colorMode + 1) % 3;
+        tapZCooldown = 15;
+      }
     }
 
     /* ============================================================
@@ -519,7 +532,7 @@
     }
 
     /* ============================================================
-       手勢控制整合
+       手勢控制整合（含 pinch 放大縮小）
     ============================================================ */
     const controls = {
       spread: 1.0,
@@ -535,16 +548,17 @@
       const x = 1 - finger.x;
 
       detectFingerSwipe(x);
-      detectTap(landmarks);
+      detectForwardTap(landmarks);
 
       const rot = getHandRotation(landmarks);
       controls.handX += (rot - controls.handX) * 0.2;
 
-      const palmWidth = Math.hypot(
-        landmarks[1].x - landmarks[17].x,
-        landmarks[1].y - landmarks[17].y
+      const pinch = Math.hypot(
+        landmarks[4].x - landmarks[8].x,
+        landmarks[4].y - landmarks[8].y
       );
-      controls.spread = THREE.MathUtils.clamp(palmWidth * 6, 0.3, 3.0);
+
+      controls.spread = THREE.MathUtils.clamp(pinch * 20, 0.3, 4.0);
     }
         /* ============================================================
        MediaPipe Hands
@@ -591,31 +605,49 @@
     const clock = new THREE.Clock();
     let lastShape = -1;
     let baseRotationY = 0;
-    
+
     updateShapeTargets(0);
     updateShapeUI(0);
-    
+
     function animate() {
       requestAnimationFrame(animate);
       const dt = clock.getDelta();
-    
+
       if (latestHand) updateControlsFromHand(latestHand);
-    
+
       /* 切換 shape 時更新目標位置 */
       if (controls.shapeType !== lastShape) {
-    
+
         // 粒子文字模式（shapeType = 7）
         if (controls.shapeType === 7) {
-          shapeFromText("MARCO", count, (pts) => {
-            textShapePoints = pts;
+          if (!textShapePoints) {
+            shapeFromText("MARCO", count, (pts) => {
+              textShapePoints = pts;
+              updateShapeTargets(7);
+            });
+          } else {
             updateShapeTargets(7);
-          });
-        } else {
+          }
+        }
+        // 圖片+文字混合（shapeType = 8）
+        else if (controls.shapeType === 8) {
+          // 確保已經有文字點可用，沒有就先生成
+          if (!textShapePoints) {
+            shapeFromText("MARCO", count, (pts) => {
+              textShapePoints = pts;
+              updateShapeTargets(8);
+            });
+          } else {
+            updateShapeTargets(8);
+          }
+        }
+        // 其它 shape（0–6）
+        else {
           updateShapeTargets(controls.shapeType);
         }
-    
+
         updateShapeUI(controls.shapeType);
-    
+
         // UI 文字模式（shapeType = 6）
         if (controls.shapeType === 6) {
           document.getElementById("messageBox").style.display = "block";
@@ -624,29 +656,29 @@
           document.getElementById("messageBox").style.display = "none";
           particles.visible = true;
         }
-    
+
         lastShape = controls.shapeType;
       }
-    
-      /* 粒子更新（只排除 shapeType 6，7 要更新） */
+
+      /* 粒子更新（只排除 shapeType 6；7 和 8 一樣要更新） */
       if (controls.shapeType !== 6) {
-    
+
         const pos = geometry.getAttribute("position").array;
         const col = geometry.getAttribute("color").array;
-    
+
         for (let i = 0; i < count; i++) {
           const i3 = i * 3;
-    
+
           const tx = targetPositions[i3]     * controls.spread;
           const ty = targetPositions[i3 + 1] * controls.spread;
           const tz = targetPositions[i3 + 2] * controls.spread;
-    
+
           pos[i3]     += (tx - pos[i3])     * 0.1;
           pos[i3 + 1] += (ty - pos[i3 + 1]) * 0.1;
           pos[i3 + 2] += (tz - pos[i3 + 2]) * 0.1;
-    
+
           let r, g, b;
-    
+
           // 圖片粒子顏色
           if (controls.shapeType === 5 && imageShapePoints) {
             const cImg = imageShapePoints[i].color;
@@ -661,6 +693,15 @@
             g = cTxt.g;
             b = cTxt.b;
           }
+          // 圖片 + 文字混合顏色（shapeType = 8）
+          else if (controls.shapeType === 8 && imageShapePoints && textShapePoints) {
+            const cImg = imageShapePoints[i].color;
+            const cTxt = textShapePoints[i].color;
+
+            r = (cImg.r + cTxt.r) * 0.5;
+            g = (cImg.g + cTxt.g) * 0.5;
+            b = (cImg.b + cTxt.b) * 0.5;
+          }
           // 其它模式
           else {
             if (controls.colorMode === 0) {
@@ -673,23 +714,23 @@
               r = c.r; g = c.g; b = c.b;
             }
           }
-    
+
           col[i3]     += (r - col[i3])     * 0.2;
           col[i3 + 1] += (g - col[i3 + 1]) * 0.2;
           col[i3 + 2] += (b - col[i3 + 2]) * 0.2;
         }
-    
+
         geometry.getAttribute("position").needsUpdate = true;
         geometry.getAttribute("color").needsUpdate = true;
       }
-    
+
       /* 粒子旋轉（手腕控制） */
       baseRotationY += dt * 0.2;
       particles.rotation.y = baseRotationY + controls.handX * 1.2;
-    
+
       renderer.render(scene, camera);
     }
-    
+
     animate();
   </script>
 </body>
