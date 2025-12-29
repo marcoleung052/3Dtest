@@ -1,259 +1,352 @@
-// =========================
-//  Three.js 基本場景
-// =========================
-const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(
-  60,
-  window.innerWidth / window.innerHeight,
-  0.1,
-  1000
-);
-camera.position.set(0, 0, 5);
+// =====================================================
+// 基本設定
+// =====================================================
+const SIZE = 256;                 // 256×256 = 65536 粒子
+const NUM = SIZE * SIZE;
 
-const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setSize(window.innerWidth, window.innerHeight);
-document.body.appendChild(renderer.domElement);
+let renderer, scene, camera;
+let simScene, simCamera;
+let posRT_A, posRT_B;
+let velRT_A, velRT_B;
 
-// =========================
-//  粒子初始化
-// =========================
-const count = 5000;
-const positions = new Float32Array(count * 3);
-const colors = new Float32Array(count * 3);
-const targetPositions = new Float32Array(count * 3);
+initThree();
+initGPGPU();
+initParticles();
+initHandTracking();
+animate();
 
-for (let i = 0; i < count; i++) {
-  const i3 = i * 3;
-  positions[i3 + 0] = (Math.random() - 0.5) * 4;
-  positions[i3 + 1] = (Math.random() - 0.5) * 4;
-  positions[i3 + 2] = (Math.random() - 0.5) * 4;
+// =====================================================
+// Three.js 場景
+// =====================================================
+function initThree() {
+  scene = new THREE.Scene();
+  camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.1, 1000);
+  camera.position.set(0, 0, 5);
 
-  colors[i3 + 0] = Math.random();
-  colors[i3 + 1] = Math.random();
-  colors[i3 + 2] = Math.random();
+  renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setSize(innerWidth, innerHeight);
+  document.body.appendChild(renderer.domElement);
+
+  window.addEventListener("resize", () => {
+    camera.aspect = innerWidth / innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(innerWidth, innerHeight);
+  });
 }
 
-const geometry = new THREE.BufferGeometry();
-geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
-
-const material = new THREE.PointsMaterial({
-  size: 0.05,
-  vertexColors: true,
-  transparent: true,
-  depthWrite: false,
-});
-
-const particles = new THREE.Points(geometry, material);
-scene.add(particles);
-
-// =========================
-//  粒子形狀模板
-// =========================
-function shapeSphere(i, count) {
-  const u = i / count;
-  const theta = Math.acos(2 * u - 1);
-  const phi = Math.random() * Math.PI * 2;
-  const r = 1.0;
-  return new THREE.Vector3(
-    r * Math.sin(theta) * Math.cos(phi),
-    r * Math.cos(theta),
-    r * Math.sin(theta) * Math.sin(phi)
-  );
+// =====================================================
+// 建立 RenderTarget
+// =====================================================
+function createRT() {
+  return new THREE.WebGLRenderTarget(SIZE, SIZE, {
+    type: THREE.FloatType,
+    format: THREE.RGBAFormat,
+    minFilter: THREE.NearestFilter,
+    magFilter: THREE.NearestFilter,
+    wrapS: THREE.ClampToEdgeWrapping,
+    wrapT: THREE.ClampToEdgeWrapping,
+  });
 }
 
-function shapeHeart(i, count) {
-  const t = (i / count) * Math.PI * 2;
-  const r = 0.5;
-  const x = r * 16 * Math.pow(Math.sin(t), 3);
-  const y =
-    r *
-    (13 * Math.cos(t) -
-      5 * Math.cos(2 * t) -
-      2 * Math.cos(3 * t) -
-      Math.cos(4 * t));
-  const z = (Math.random() - 0.5) * 0.2;
-  return new THREE.Vector3(x * 0.05, y * 0.05, z);
-}
+// =====================================================
+// 初始化 GPGPU
+// =====================================================
+function initGPGPU() {
+  posRT_A = createRT();
+  posRT_B = createRT();
+  velRT_A = createRT();
+  velRT_B = createRT();
 
-function shapeFlower(i, count) {
-  const petals = 5;
-  const t = (i / count) * Math.PI * 2;
-  const r = 0.8 + 0.2 * Math.sin(petals * t);
-  return new THREE.Vector3(
-    r * Math.cos(t),
-    r * Math.sin(t),
-    (Math.random() - 0.5) * 0.3
-  );
-}
-
-function shapeSaturn(i, count) {
-  if (i < count * 0.7) return shapeSphere(i, count * 0.7);
-  const t = Math.random() * Math.PI * 2;
-  return new THREE.Vector3(
-    1.5 * Math.cos(t),
-    (Math.random() - 0.5) * 0.1,
-    1.5 * Math.sin(t)
-  );
-}
-
-function shapeFireworks(i, count) {
-  const t = Math.random() * Math.PI * 2;
-  const u = Math.random() * 2 - 1;
-  const theta = Math.acos(u);
-  const r = 0.2 + Math.random() * 2.0;
-  return new THREE.Vector3(
-    r * Math.sin(theta) * Math.cos(t),
-    r * Math.cos(theta),
-    r * Math.sin(theta) * Math.sin(t)
-  );
-}
-
-function updateShapeTargets(type) {
-  for (let i = 0; i < count; i++) {
-    let p;
-    switch (type) {
-      case 0: p = shapeSphere(i, count); break;
-      case 1: p = shapeHeart(i, count); break;
-      case 2: p = shapeFlower(i, count); break;
-      case 3: p = shapeSaturn(i, count); break;
-      case 4: p = shapeFireworks(i, count); break;
-    }
-    const i3 = i * 3;
-    targetPositions[i3 + 0] = p.x;
-    targetPositions[i3 + 1] = p.y;
-    targetPositions[i3 + 2] = p.z;
+  // 初始化位置貼圖
+  const initPos = new Float32Array(NUM * 4);
+  for (let i = 0; i < NUM; i++) {
+    const i4 = i * 4;
+    initPos[i4 + 0] = (Math.random() - 0.5) * 2;
+    initPos[i4 + 1] = (Math.random() - 0.5) * 2;
+    initPos[i4 + 2] = (Math.random() - 0.5) * 2;
+    initPos[i4 + 3] = 1.0;
   }
+  const texPos = new THREE.DataTexture(initPos, SIZE, SIZE, THREE.RGBAFormat, THREE.FloatType);
+  texPos.needsUpdate = true;
+
+  renderer.setRenderTarget(posRT_A);
+  renderer.copyTextureToTexture(new THREE.Vector2(0, 0), texPos, posRT_A.texture);
+
+  // 初始化速度貼圖
+  const initVel = new Float32Array(NUM * 4);
+  const texVel = new THREE.DataTexture(initVel, SIZE, SIZE, THREE.RGBAFormat, THREE.FloatType);
+  texVel.needsUpdate = true;
+
+  renderer.setRenderTarget(velRT_A);
+  renderer.copyTextureToTexture(new THREE.Vector2(0, 0), texVel, velRT_A.texture);
+  renderer.setRenderTarget(null);
+
+  // 模擬場景
+  simScene = new THREE.Scene();
+  simCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+
+  const simPlane = new THREE.PlaneGeometry(2, 2);
+  simMaterial = new THREE.ShaderMaterial({
+    uniforms: {
+      u_posTex: { value: posRT_A.texture },
+      u_velTex: { value: velRT_A.texture },
+      u_time: { value: 0 },
+      u_dt: { value: 0.016 },
+      u_shape: { value: 0 },
+      u_spread: { value: 1.0 },
+    },
+    vertexShader: `
+      varying vec2 vUv;
+      void main() {
+        vUv = uv;
+        gl_Position = vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      precision highp float;
+      varying vec2 vUv;
+
+      uniform sampler2D u_posTex;
+      uniform sampler2D u_velTex;
+      uniform float u_time;
+      uniform float u_dt;
+      uniform float u_spread;
+      uniform int u_shape;
+
+      // -------------------------
+      // 形狀模板（GPU 版）
+      // -------------------------
+      vec3 shapeSphere(vec2 uv) {
+        float x = uv.x * 2.0 - 1.0;
+        float y = uv.y * 2.0 - 1.0;
+        float z = sqrt(max(0.0, 1.0 - x*x - y*y));
+        return vec3(x, y, z);
+      }
+
+      vec3 shapeHeart(vec2 uv) {
+        float t = uv.x * 6.283;
+        float r = 0.3;
+        float x = r * 16.0 * pow(sin(t), 3.0);
+        float y = r * (13.0*cos(t) - 5.0*cos(2.0*t) - 2.0*cos(3.0*t) - cos(4.0*t));
+        return vec3(x*0.05, y*0.05, 0.0);
+      }
+
+      vec3 shapeFlower(vec2 uv) {
+        float t = uv.x * 6.283;
+        float r = 0.8 + 0.2 * sin(5.0 * t);
+        return vec3(r*cos(t), r*sin(t), 0.0);
+      }
+
+      vec3 shapeStar(vec2 uv) {
+        float t = uv.x * 6.283;
+        float r = (mod(floor(uv.y * 10.0), 2.0) == 0.0) ? 1.0 : 0.4;
+        return vec3(r*cos(t), r*sin(t), 0.0);
+      }
+
+      vec3 shapeSaturn(vec2 uv) {
+        float t = uv.x * 6.283;
+        if (uv.y < 0.7) {
+          return vec3(0.6*cos(t), 0.6*sin(t), 0.0);
+        } else {
+          return vec3(1.2*cos(t), 0.0, 1.2*sin(t));
+        }
+      }
+
+      vec3 getShape(vec2 uv) {
+        if (u_shape == 0) return shapeSphere(uv);
+        if (u_shape == 1) return shapeHeart(uv);
+        if (u_shape == 2) return shapeFlower(uv);
+        if (u_shape == 3) return shapeSaturn(uv);
+        if (u_shape == 4) return shapeStar(uv);
+        return shapeSphere(uv);
+      }
+
+      void main() {
+        vec4 pos = texture2D(u_posTex, vUv);
+        vec4 vel = texture2D(u_velTex, vUv);
+
+        vec3 target = getShape(vUv) * u_spread;
+        vec3 dir = target - pos.xyz;
+
+        vel.xyz += dir * 0.5 * u_dt;
+        vel.xyz *= 0.98;
+
+        pos.xyz += vel.xyz * u_dt;
+
+        gl_FragColor = pos;
+      }
+    `,
+  });
+
+  simScene.add(new THREE.Mesh(simPlane, simMaterial));
 }
 
-// =========================
-//  手勢控制參數
-// =========================
+// =====================================================
+// 粒子渲染
+// =====================================================
+let particles, renderMaterial;
+
+function initParticles() {
+  const geo = new THREE.BufferGeometry();
+  const uv = new Float32Array(NUM * 2);
+  const pos = new Float32Array(NUM * 3);
+
+  let i = 0;
+  for (let y = 0; y < SIZE; y++) {
+    for (let x = 0; x < SIZE; x++) {
+      uv[i * 2 + 0] = (x + 0.5) / SIZE;
+      uv[i * 2 + 1] = (y + 0.5) / SIZE;
+      i++;
+    }
+  }
+
+  geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+  geo.setAttribute("uv", new THREE.BufferAttribute(uv, 2));
+
+  renderMaterial = new THREE.ShaderMaterial({
+    uniforms: {
+      u_posTex: { value: posRT_A.texture },
+      u_time: { value: 0 },
+      u_colorMode: { value: 0 },
+    },
+    vertexShader: `
+      precision highp float;
+      uniform sampler2D u_posTex;
+      uniform float u_time;
+      varying vec3 vColor;
+
+      void main() {
+        vec2 uv = uv;
+        vec3 pos = texture2D(u_posTex, uv).xyz;
+
+        float h = fract(uv.x + u_time * 0.1);
+        vColor = vec3(h, 1.0 - h, 0.8);
+
+        vec4 mv = modelViewMatrix * vec4(pos, 1.0);
+        gl_PointSize = 2.0 * (300.0 / -mv.z);
+        gl_Position = projectionMatrix * mv;
+      }
+    `,
+    fragmentShader: `
+      precision highp float;
+      varying vec3 vColor;
+      void main() {
+        float d = length(gl_PointCoord - 0.5);
+        if (d > 0.5) discard;
+        gl_FragColor = vec4(vColor, 1.0);
+      }
+    `,
+    transparent: true,
+    depthWrite: false,
+  });
+
+  particles = new THREE.Points(geo, renderMaterial);
+  scene.add(particles);
+}
+
+// =====================================================
+// 手勢控制
+// =====================================================
 const controls = {
   spread: 1.0,
+  shape: 0,
   colorMode: 0,
-  shapeType: 0,
 };
 
-function distance2D(a, b) {
-  return Math.hypot(a.x - b.x, a.y - b.y);
-}
-
-function updateControlsFromHand(landmarks) {
-  if (!landmarks) return;
-
-  const wrist = landmarks[0];
-  const indexTip = landmarks[8];
-  const thumbTip = landmarks[4];
-  const pinky = landmarks[17];
-
-  const palmWidth = distance2D(landmarks[1], landmarks[17]);
-  controls.spread = THREE.MathUtils.clamp(palmWidth * 5, 0.3, 3.0);
-
-  const pinch = distance2D(thumbTip, indexTip);
-  if (pinch < 0.05) controls.colorMode = 0;
-  else if (pinch < 0.1) controls.colorMode = 1;
-  else controls.colorMode = 2;
-
-  const cx = (wrist.x + indexTip.x + pinky.x) / 3;
-  if (cx < 0.33) controls.shapeType = 0;
-  else if (cx < 0.5) controls.shapeType = 1;
-  else if (cx < 0.66) controls.shapeType = 2;
-  else if (cx < 0.8) controls.shapeType = 3;
-  else controls.shapeType = 4;
-}
-
-// =========================
-//  MediaPipe Hands
-// =========================
-const video = document.getElementById("video");
 let latestHand = null;
 
-navigator.mediaDevices.getUserMedia({ video: true }).then((stream) => {
-  video.srcObject = stream;
-});
+function initHandTracking() {
+  const video = document.getElementById("video");
 
-const hands = new Hands({
-  locateFile: (file) =>
-    `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`,
-});
+  navigator.mediaDevices.getUserMedia({ video: true }).then((stream) => {
+    video.srcObject = stream;
+  });
 
-hands.setOptions({
-  maxNumHands: 1,
-  modelComplexity: 1,
-  minDetectionConfidence: 0.7,
-  minTrackingConfidence: 0.7,
-});
+  const hands = new Hands({
+    locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`,
+  });
 
-hands.onResults((results) => {
-  latestHand =
-    results.multiHandLandmarks && results.multiHandLandmarks.length > 0
-      ? results.multiHandLandmarks[0]
-      : null;
-});
+  hands.setOptions({
+    maxNumHands: 1,
+    modelComplexity: 1,
+    minDetectionConfidence: 0.7,
+    minTrackingConfidence: 0.7,
+  });
 
-const cameraMP = new Camera(video, {
-  onFrame: async () => {
-    await hands.send({ image: video });
-  },
-  width: 640,
-  height: 480,
-});
-cameraMP.start();
+  hands.onResults((res) => {
+    latestHand = res.multiHandLandmarks?.[0] || null;
+  });
 
-// =========================
-//  動畫 Loop
-// =========================
+  const cam = new Camera(video, {
+    onFrame: async () => hands.send({ image: video }),
+    width: 640,
+    height: 480,
+  });
+  cam.start();
+}
+
+function updateHandControls() {
+  if (!latestHand) return;
+
+  const wrist = latestHand[0];
+  const index = latestHand[8];
+  const thumb = latestHand[4];
+  const pinky = latestHand[17];
+
+  // spread
+  const palm = Math.hypot(
+    latestHand[1].x - latestHand[17].x,
+    latestHand[1].y - latestHand[17].y
+  );
+  controls.spread = THREE.MathUtils.clamp(palm * 5, 0.3, 3.0);
+
+  // color
+  const pinch = Math.hypot(index.x - thumb.x, index.y - thumb.y);
+  controls.colorMode = pinch < 0.05 ? 0 : pinch < 0.1 ? 1 : 2;
+
+  // shape
+  const cx = (wrist.x + index.x + pinky.x) / 3;
+  if (cx < 0.2) controls.shape = 0;      // 球
+  else if (cx < 0.4) controls.shape = 1; // 心
+  else if (cx < 0.6) controls.shape = 2; // 花
+  else if (cx < 0.8) controls.shape = 3; // 土星
+  else controls.shape = 4;               // 星星
+}
+
+// =====================================================
+// 動畫
+// =====================================================
 const clock = new THREE.Clock();
-let lastShape = -1;
+
+function simulate(dt) {
+  simMaterial.uniforms.u_dt.value = dt;
+  simMaterial.uniforms.u_time.value += dt;
+  simMaterial.uniforms.u_spread.value = controls.spread;
+  simMaterial.uniforms.u_shape.value = controls.shape;
+
+  simMaterial.uniforms.u_posTex.value = posRT_A.texture;
+  simMaterial.uniforms.u_velTex.value = velRT_A.texture;
+
+  renderer.setRenderTarget(posRT_B);
+  renderer.render(simScene, simCamera);
+  renderer.setRenderTarget(null);
+
+  let tmp = posRT_A;
+  posRT_A = posRT_B;
+  posRT_B = tmp;
+
+  renderMaterial.uniforms.u_posTex.value = posRT_A.texture;
+}
 
 function animate() {
   requestAnimationFrame(animate);
   const dt = clock.getDelta();
 
-  updateControlsFromHand(latestHand);
+  updateHandControls();
+  simulate(dt);
 
-  if (controls.shapeType !== lastShape) {
-    updateShapeTargets(controls.shapeType);
-    lastShape = controls.shapeType;
-  }
-
-  const pos = geometry.getAttribute("position").array;
-  const col = geometry.getAttribute("color").array;
-
-  for (let i = 0; i < count; i++) {
-    const i3 = i * 3;
-
-    const tx = targetPositions[i3 + 0] * controls.spread;
-    const ty = targetPositions[i3 + 1] * controls.spread;
-    const tz = targetPositions[i3 + 2] * controls.spread;
-
-    pos[i3 + 0] += (tx - pos[i3 + 0]) * 0.1;
-    pos[i3 + 1] += (ty - pos[i3 + 1]) * 0.1;
-    pos[i3 + 2] += (tz - pos[i3 + 2]) * 0.1;
-
-    let r, g, b;
-    if (controls.colorMode === 0) {
-      r = 0.2; g = 0.7; b = 1.0;
-    } else if (controls.colorMode === 1) {
-      r = 1.0; g = 0.6; b = 0.2;
-    } else {
-      const h = (i / count + clock.elapsedTime * 0.1) % 1;
-      const c = new THREE.Color().setHSL(h, 0.7, 0.5);
-      r = c.r; g = c.g; b = c.b;
-    }
-
-    col[i3 + 0] += (r - col[i3 + 0]) * 0.2;
-    col[i3 + 1] += (g - col[i3 + 1]) * 0.2;
-    col[i3 + 2] += (b - col[i3 + 2]) * 0.2;
-  }
-
-  geometry.getAttribute("position").needsUpdate = true;
-  geometry.getAttribute("color").needsUpdate = true;
-
-  particles.rotation.y += dt * 0.2;
+  renderMaterial.uniforms.u_time.value += dt;
+  renderMaterial.uniforms.u_colorMode.value = controls.colorMode;
 
   renderer.render(scene, camera);
 }
-
-animate();
