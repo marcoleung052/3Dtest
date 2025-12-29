@@ -281,32 +281,37 @@ function detectFingerSwipe(x) {
   const dx = x - lastFingerX;
   lastFingerX = x;
 
-  // 手指停止 → 解鎖
-  if (Math.abs(dx) < 0.005) {
-    swipeTimer++;
-    if (swipeTimer > 5) {
-      swipeLock = false;
-      swipeTimer = 0;
+  // ===== 中立區判定（手指停止） =====
+  if (Math.abs(dx) < 0.01) {
+    neutralFrames++;
+    if (neutralFrames > 5) {
+      swipeLocked = false;   // 完全停止後才解鎖
+      neutralFrames = 0;
     }
     return;
   }
 
-  if (swipeLock) return;
+  // 手指還在動 → 重置中立計數
+  neutralFrames = 0;
 
-  // 手指往右滑（鏡像後 x 增加）
-  if (dx > 0.04) {
+  // 如果已經觸發過一次 → 不再觸發
+  if (swipeLocked) return;
+
+  // ===== 手指往右滑（鏡像後 x 增加） =====
+  if (dx > 0.05) {
     controls.shapeType = (controls.shapeType + 1) % 5;
-    swipeLock = true;
+    swipeLocked = true;
     return;
   }
 
-  // 手指往左滑
-  if (dx < -0.04) {
+  // ===== 手指往左滑 =====
+  if (dx < -0.05) {
     controls.shapeType = (controls.shapeType - 1 + 5) % 5;
-    swipeLock = true;
+    swipeLocked = true;
     return;
   }
 }
+
 
 function updateControlsFromHand(landmarks) {
   if (!landmarks) return;
