@@ -8,7 +8,7 @@ let renderer, scene, camera;
 let simScene, simCamera;
 let posRT_A, posRT_B;
 let velRT_A, velRT_B;
-let particles, renderMaterial;
+let particles, renderMaterial, simMaterial;
 
 
 initThree();
@@ -215,14 +215,15 @@ function initParticles() {
       uniform sampler2D u_posTex;
       uniform float u_time;
       varying vec3 vColor;
-
+    
       void main() {
-        vec2 uv = uv;
-        vec3 pos = texture2D(u_posTex, uv).xyz;
-
-        float h = fract(uv.x + u_time * 0.1);
+        // 直接使用 attribute uv
+        vec2 coord = uv;
+        vec3 pos = texture2D(u_posTex, coord).xyz;
+    
+        float h = fract(coord.x + u_time * 0.1);
         vColor = vec3(h, 1.0 - h, 0.8);
-
+    
         vec4 mv = modelViewMatrix * vec4(pos, 1.0);
         gl_PointSize = 2.0 * (300.0 / -mv.z);
         gl_Position = projectionMatrix * mv;
