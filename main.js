@@ -247,7 +247,7 @@ function initParticles() {
         vColor = vec3(h, 1.0 - h, 0.8);
 
         vec4 mv = modelViewMatrix * vec4(pos, 1.0);
-        gl_PointSize = 2.0 * (300.0 / -mv.z);
+        gl_PointSize = 0.8 * (300.0 / -mv.z);
         gl_Position = projectionMatrix * mv;
       }
     `,
