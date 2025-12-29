@@ -139,44 +139,65 @@ function distance2D(a, b) {
   return Math.hypot(a.x - b.x, a.y - b.y);
 }
 
-// ===== 新增：撥動偵測 =====
+// =========================
+//  撥動偵測（一次撥一下只換一個圖）
+// =========================
 let lastX = null;
-let swipeCooldown = 0;
+let swipeLock = false;
+let swipeTimer = 0;
+
+function detectSwipe(wristX) {
+  if (lastX === null) {
+    lastX = wristX;
+    return;
+  }
+
+  const dx = wristX - lastX;
+  lastX = wristX;
+
+  // 手停止 → 解鎖
+  if (Math.abs(dx) < 0.01) {
+    swipeTimer++;
+    if (swipeTimer > 5) {
+      swipeLock = false;
+      swipeTimer = 0;
+    }
+    return;
+  }
+
+  if (swipeLock) return;
+
+  // 撥右
+  if (dx > 0.04) {
+    controls.shapeType = (controls.shapeType + 1) % 5;
+    swipeLock = true;
+    return;
+  }
+
+  // 撥左
+  if (dx < -0.04) {
+    controls.shapeType = (controls.shapeType - 1 + 5) % 5;
+    swipeLock = true;
+    return;
+  }
+}
 
 // =========================
-//  手勢控制（整合撥左撥右）
+//  手勢控制整合
 // =========================
 function updateControlsFromHand(landmarks) {
   if (!landmarks) return;
 
   const wrist = landmarks[0];
-  const indexTip = landmarks[8];
-  const thumbTip = landmarks[4];
+  detectSwipe(wrist.x);
 
-  // ======== 撥動偵測 ========
-  if (lastX !== null) {
-    const dx = wrist.x - lastX;
-
-    if (swipeCooldown <= 0) {
-      if (dx > 0.05) {
-        controls.shapeType = (controls.shapeType + 1) % 5;
-        swipeCooldown = 20;
-      } else if (dx < -0.05) {
-        controls.shapeType = (controls.shapeType - 1 + 5) % 5;
-        swipeCooldown = 20;
-      }
-    }
-  }
-
-  lastX = wrist.x;
-  if (swipeCooldown > 0) swipeCooldown--;
-
-  // ======== 手掌張開控制 spread ========
   const palmWidth = distance2D(landmarks[1], landmarks[17]);
   controls.spread = THREE.MathUtils.clamp(palmWidth * 5, 0.3, 3.0);
 
-  // ======== 捏合控制顏色模式 ========
+  const indexTip = landmarks[8];
+  const thumbTip = landmarks[4];
   const pinch = distance2D(thumbTip, indexTip);
+
   if (pinch < 0.05) controls.colorMode = 0;
   else if (pinch < 0.1) controls.colorMode = 1;
   else controls.colorMode = 2;
