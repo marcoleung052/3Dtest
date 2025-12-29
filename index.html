@@ -92,6 +92,15 @@
   <img id="shapeImage" src="xxxx.png" style="display:none;">
 
 <script>
+
+const img = document.getElementById("shapeImage");
+img.onerror = () => {
+  console.error("圖片載入失敗：請確認檔名與路徑");
+};
+img.onload = () => {
+  console.log("圖片載入成功");
+};
+
 /* ============================================================
    Three.js 基本場景
 ============================================================ */
