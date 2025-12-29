@@ -268,52 +268,62 @@
     let textShapePoints = null;
 
     function shapeFromText(text, count, callback) {
-      const canvas = document.createElement("canvas");
-      const ctx = canvas.getContext("2d");
+  const canvas = document.createElement("canvas");
+  const ctx = canvas.getContext("2d");
 
-      canvas.width = 400;
-      canvas.height = 200;
+  canvas.width = 500;
+  canvas.height = 200;
 
-      ctx.fillStyle = "black";
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
+  // 背景透明
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      ctx.fillStyle = "white";
-      ctx.font = "bold 120px sans-serif";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText(text, canvas.width / 2, canvas.height / 2);
+  // 自動調整字體大小
+  let fontSize = 150;
+  ctx.font = `bold ${fontSize}px sans-serif`;
 
-      const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
-      const points = [];
+  // 如果字太寬 → 自動縮小
+  while (ctx.measureText(text).width > canvas.width * 0.9) {
+    fontSize -= 10;
+    ctx.font = `bold ${fontSize}px sans-serif`;
+  }
 
-      for (let y = 0; y < canvas.height; y += 3) {
-        for (let x = 0; x < canvas.width; x += 3) {
-          const i = (y * canvas.width + x) * 4;
-          const a = data[i + 3];
+  ctx.fillStyle = "white";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(text, canvas.width / 2, canvas.height / 2);
 
-          if (a > 128) {
-            const nx = (x / canvas.width) * 2 - 1;
-            const ny = -(y / canvas.height) * 2 + 1;
+  const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+  const points = [];
 
-            points.push({
-              pos: new THREE.Vector3(nx, ny, 0),
-              color: { r: 1, g: 1, b: 1 }
-            });
-          }
-        }
-      }
+  // 取樣密度更高
+  for (let y = 0; y < canvas.height; y += 2) {
+    for (let x = 0; x < canvas.width; x += 2) {
+      const i = (y * canvas.width + x) * 4;
+      const a = data[i + 3];
 
-      const result = [];
-      for (let i = 0; i < count; i++) {
-        const p = points[Math.floor(Math.random() * points.length)];
-        result.push({
-          pos: p.pos.clone(),
-          color: { r: p.color.r, g: p.color.g, b: p.color.b }
+      if (a > 128) {
+        const nx = (x / canvas.width) * 2 - 1;
+        const ny = -(y / canvas.height) * 2 + 1;
+
+        points.push({
+          pos: new THREE.Vector3(nx, ny, 0),
+          color: { r: 1, g: 1, b: 1 }
         });
       }
-
-      callback(result);
     }
+  }
+
+  const result = [];
+  for (let i = 0; i < count; i++) {
+    const p = points[Math.floor(Math.random() * points.length)];
+    result.push({
+      pos: p.pos.clone(),
+      color: { r: p.color.r, g: p.color.g, b: p.color.b }
+    });
+  }
+
+  callback(result);
+}
         /* ============================================================
        粒子形狀模板
     ============================================================ */
