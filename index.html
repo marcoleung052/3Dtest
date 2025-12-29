@@ -580,19 +580,19 @@
     const clock = new THREE.Clock();
     let lastShape = -1;
     let baseRotationY = 0;
-
+    
     updateShapeTargets(0);
     updateShapeUI(0);
-
+    
     function animate() {
       requestAnimationFrame(animate);
       const dt = clock.getDelta();
-
+    
       if (latestHand) updateControlsFromHand(latestHand);
-
+    
       /* 切換 shape 時更新目標位置 */
       if (controls.shapeType !== lastShape) {
-
+    
         // 粒子文字模式（shapeType = 7）
         if (controls.shapeType === 7) {
           shapeFromText("MARCO", count, (pts) => {
@@ -602,9 +602,9 @@
         } else {
           updateShapeTargets(controls.shapeType);
         }
-
+    
         updateShapeUI(controls.shapeType);
-
+    
         // UI 文字模式（shapeType = 6）
         if (controls.shapeType === 6) {
           document.getElementById("messageBox").style.display = "block";
@@ -613,29 +613,29 @@
           document.getElementById("messageBox").style.display = "none";
           particles.visible = true;
         }
-
+    
         lastShape = controls.shapeType;
       }
-
-      /* 粒子更新（排除 shapeType 6 & 7） */
-      if (controls.shapeType !== 6 && controls.shapeType !== 7) {
-
+    
+      /* 粒子更新（只排除 shapeType 6，7 要更新） */
+      if (controls.shapeType !== 6) {
+    
         const pos = geometry.getAttribute("position").array;
         const col = geometry.getAttribute("color").array;
-
+    
         for (let i = 0; i < count; i++) {
           const i3 = i * 3;
-
+    
           const tx = targetPositions[i3]     * controls.spread;
           const ty = targetPositions[i3 + 1] * controls.spread;
           const tz = targetPositions[i3 + 2] * controls.spread;
-
+    
           pos[i3]     += (tx - pos[i3])     * 0.1;
           pos[i3 + 1] += (ty - pos[i3 + 1]) * 0.1;
           pos[i3 + 2] += (tz - pos[i3 + 2]) * 0.1;
-
+    
           let r, g, b;
-
+    
           // 圖片粒子顏色
           if (controls.shapeType === 5 && imageShapePoints) {
             const cImg = imageShapePoints[i].color;
@@ -662,23 +662,23 @@
               r = c.r; g = c.g; b = c.b;
             }
           }
-
+    
           col[i3]     += (r - col[i3])     * 0.2;
           col[i3 + 1] += (g - col[i3 + 1]) * 0.2;
           col[i3 + 2] += (b - col[i3 + 2]) * 0.2;
         }
-
+    
         geometry.getAttribute("position").needsUpdate = true;
         geometry.getAttribute("color").needsUpdate = true;
       }
-
+    
       /* 粒子旋轉（手腕控制） */
       baseRotationY += dt * 0.2;
       particles.rotation.y = baseRotationY + controls.handX * 1.2;
-
+    
       renderer.render(scene, camera);
     }
-
+    
     animate();
   </script>
 </body>
